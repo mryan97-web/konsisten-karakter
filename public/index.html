@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consistent Character AI — Konsisten Karakter untuk Konten Viral</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #333;
+      --text: #f0f0f0;
+      --text-sec: #999;
+      --accent: #8b5cf6;
+      --accent-light: #a78bfa;
+      --accent-dark: #7c3aed;
+      --green: #22c55e;
+      --gradient: linear-gradient(135deg, #8b5cf6, #6366f1);
+      --gradient2: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      --radius: 12px;
+      --radius-lg: 20px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Utility */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    .gradient-text {
+      background: var(--gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.25s;
+      font-size: 0.95rem;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--gradient);
+      color: white;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent-light);
+    }
+
+    .btn-lg {
+      padding: 1rem 2rem;
+      font-size: 1.05rem;
+    }
+
+    /* ==================== HEADER ==================== */
+    header {
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: rgba(15,15,15,0.95);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 800;
+      font-size: 1.2rem;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--gradient);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      color: white;
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .header-nav a {
+      color: var(--text-sec);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: 0.2s;
+    }
+    .header-nav a:hover { color: var(--text); }
+
+    #userHeaderInfo {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .tier-pill {
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .tier-free { background: #27272a; color: #999; }
+    .tier-pro { background: rgba(139, 92, 246, 0.2); color: var(--accent-light); border: 1px solid rgba(139, 92, 246, 0.3); }
+
+    /* ==================== HERO ==================== */
+    .hero {
+      padding: 6rem 0 4rem;
+      text-align: center;
+    }
+
+    .hero h1 {
+      font-size: 3.5rem;
+      font-weight: 900;
+      line-height: 1.15;
+      margin-bottom: 1.5rem;
+      letter-spacing: -1px;
+    }
+
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-sec);
+      max-width: 650px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    /* ==================== CHARACTER SHOWCASE ==================== */
+    .section {
+      padding: 5rem 0;
+    }
+
+    .section-title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-desc {
+      color: var(--text-sec);
+      font-size: 1.05rem;
+      margin-bottom: 3rem;
+      max-width: 600px;
+    }
+
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .char-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      text-align: center;
+      transition: 0.3s;
+    }
+    .char-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+    }
+
+    .char-avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: var(--gradient);
+      margin: 0 auto 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      opacity: 0.9;
+    }
+    .char-avatar.female { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+    .char-avatar.male { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+
+    .char-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .char-card p {
+      color: var(--text-sec);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .char-tag {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: rgba(34, 197, 94, 0.1);
+      color: var(--green);
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-top: 1rem;
+    }
+
+    /* ==================== PRICING ==================== */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .price-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      transition: 0.3s;
+      position: relative;
+    }
+    .price-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+    }
+    .price-card.featured {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, rgba(139,92,246,0.1), var(--surface));
+    }
+
+    .popular-tag {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--gradient);
+      color: white;
+      padding: 0.35rem 1.25rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .price-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .price-amount {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 0.25rem;
+    }
+
+    .price-period {
+      color: var(--text-sec);
+      font-size: 0.9rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .price-features {
+      list-style: none;
+      text-align: left;
+      margin: 1.5rem 0;
+    }
+
+    .price-features li {
+      padding: 0.5rem 0;
+      font-size: 0.9rem;
+      color: var(--text-sec);
+      border-bottom: 1px solid var(--border);
+    }
+    .price-features li:last-child { border-bottom: none; }
+
+    .price-features li.checked::before { content: "✅ "; margin-right: 0.5rem; }
+    .price-features li.unchecked { color: #555; }
+    .price-features li.unchecked::before { content: "❌ "; margin-right: 0.5rem; }
+
+    /* ==================== FEATURES ==================== */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      transition: 0.3s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+
+    .feature-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-card p {
+      color: var(--text-sec);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* ==================== DASHBOARD / APP ==================== */
+    .dashboard {
+      display: none;
+      padding: 2rem 0;
+    }
+
+    .dashboard.active {
+      display: block;
+    }
+
+    .dash-header {
+      margin-bottom: 2rem;
+    }
+
+    .dash-header h2 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Card */
+    .dash-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .dash-card h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 3rem 2rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+      transition: 0.3s;
+      cursor: pointer;
+    }
+    .upload-zone:hover {
+      border-color: var(--accent);
+      background: rgba(139,92,246,0.05);
+    }
+
+    .upload-zone input { display: none; }
+
+    .upload-preview {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .upload-preview img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-sec);
+    }
+
+    .form-group input,
+    .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* ==================== MODAL ==================== */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 9999;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      overflow: auto;
+    }
+
+    .modal-content {
+      background: var(--surface);
+      margin: 5% auto;
+      padding: 2.5rem;
+      border-radius: var(--radius-lg);
+      width: 90%;
+      max-width: 480px;
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    .modal-pricing { max-width: 960px; }
+    .modal-qris { max-width: 420px; text-align: center; }
+
+    .modal-close {
+      position: absolute;
+      top: 1rem;
+      right: 1.5rem;
+      color: var(--text-sec);
+      font-size: 1.5rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+    }
+    .modal-close:hover { color: var(--text); }
+
+    .modal h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab-btns {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    .tab-btn {
+      padding: 0.75rem 1.5rem;
+      background: none;
+      border: none;
+      color: var(--text-sec);
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: 0.2s;
+    }
+    .tab-btn.active { color: var(--accent-light); border-bottom-color: var(--accent); }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .divider {
+      text-align: center;
+      margin: 1.25rem 0;
+      color: var(--text-sec);
+      position: relative;
+    }
+    .divider::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--border);
+    }
+    .divider span {
+      background: var(--surface);
+      padding: 0 1rem;
+      position: relative;
+    }
+
+    /* ==================== FOOTER ==================== */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 0;
+      text-align: center;
+      color: var(--text-sec);
+      font-size: 0.9rem;
+    }
+
+    /* ==================== RESPONSIVE ==================== */
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2.2rem; }
+      .hero p { font-size: 1rem; }
+      .header-nav a { display: none; }
+      .header-nav .btn { font-size: 0.85rem; padding: 0.5rem 1rem; }
+      .section-title { font-size: 1.5rem; }
+    }
+
+    /* Loader */
+    .loader {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.5rem;
+      color: var(--text);
+      z-index: 99999;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    .toast.show { display: block; }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    .qris-img {
+      max-width: 260px;
+      margin: 1.5rem auto;
+      display: block;
+      background: white;
+      padding: 1rem;
+      border-radius: 12px;
+    }
+
+    .status-box {
+      padding: 1rem;
+      background: var(--surface2);
+      border-radius: 8px;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+
+    .char-select-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .char-select-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .char-select-card:hover { border-color: var(--accent); }
+    .char-select-card.active { border-color: var(--accent); background: rgba(139,92,246,0.1); }
+
+    .char-select-card .mini-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      margin: 0 auto 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header>
+  <div class="container header-inner">
+    <div class="logo">
+      <div class="logo-icon">✦</div>
+      <span>Consistent<span class="gradient-text">Char</span></span>
+    </div>
+    <div class="header-nav">
+      <a href="#fitur">Fitur</a>
+      <a href="#karakter">Karakter</a>
+      <a href="#harga">Harga</a>
+      <div id="userHeaderInfo">
+        <span class="tier-pill tier-free" id="headerTier">FREE</span>
+        <button class="btn btn-primary" onclick="showLogin()">🔑 Login</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <div class="container">
+    <h1>Karakter Konsisten<br>untuk <span class="gradient-text">Konten Viral</span></h1>
+    <p>Bikin karakter AI yang konsisten di setiap konten. FREE pake karakter default. PRO upload karakter sendiri — wajah, outfit, gaya, semua konsisten.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary btn-lg" onclick="scrollToSection('harga')">💳 Lihat Harga</button>
+      <button class="btn btn-outline btn-lg" onclick="scrollToSection('karakter')">👤 Lihat Karakter</button>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FITUR ==================== -->
+<section class="section" id="fitur">
+  <div class="container">
+    <h2 class="section-title">✨ Kenapa Pilih <span class="gradient-text">Kami</span>?</h2>
+    <p class="section-desc">Karakter yang konsisten = brand yang kuat. Setiap konten punya identitas yang sama.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🧬</div>
+        <h3>Character DNA</h3>
+        <p>Setiap karakter punya DNA unik — wajah, rambut, body, outfit, ekspresi. Tidak berubah di semua konten.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📸</div>
+        <h3>Upload Referensi</h3>
+        <p>Upload 2 foto karakter kamu. AI auto-ekstrak detail wajah, pakaian, gaya. Jadi descriptor lengkap.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>Karakter Lock</h3>
+        <p>Lock karakter pilihan kamu. Setiap generate prompt, karakter tetap sama. Gak ada yang berubah.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <h3>100+ Scene & Pose</h3>
+        <p>FREE dapet default scene/pose. PRO dapet semua akses — 20+ scene, 30+ pose, berbagai lighting.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>AI-Powered</h3>
+        <p>Gemini AI auto-ekstrak karakter dari foto. Face shape, skin tone, outfit, semuanya terdeteksi.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Prompt Generator</h3>
+        <p>Hasilkan prompt siap pakai untuk FLUX, Midjourney, Stable Diffusion, DALL-E, Gemini.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== KARAKTER ==================== -->
+<section class="section" id="karakter">
+  <div class="container">
+    <h2 class="section-title">👤 Karakter <span class="gradient-text">Default</span></h2>
+    <p class="section-desc">FREE tier langsung bisa pakai 2 karakter default ini. PRO tier bisa bikin karakter sendiri.</p>
+    <div class="char-grid">
+      <div class="char-card">
+        <div class="char-avatar female">👩</div>
+        <h3>Areka Girl</h3>
+        <p>Wanita Indonesia, 25 tahun, kulit sawo matang, rambut hitam lurus, wajah oval. Cocok untuk konten parfum, fashion, lifestyle.</p>
+        <span class="char-tag">TERSEDIA GRATIS</span>
+      </div>
+      <div class="char-card">
+        <div class="char-avatar male">👨</div>
+        <h3>Areka Guy</h3>
+        <p>Pria Indonesia, 27 tahun, kulit sawo matang, rambut hitam pendek, rahang tajam. Cocok untuk konten fashion, parfum pria, casual.</p>
+        <span class="char-tag">TERSEDIA GRATIS</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PRICING ==================== -->
+<section class="section" id="harga">
+  <div class="container">
+    <h2 class="section-title">💰 Pilih <span class="gradient-text">Paket</span></h2>
+    <p class="section-desc">Mulai dari gratis. Upgrade kapan aja untuk unlock fitur lengkap.</p>
+    <div class="pricing-grid">
+      <!-- FREE -->
+      <div class="price-card">
+        <h3>🎁 Free</h3>
+        <div class="price-amount">Rp 0</div>
+        <p class="price-period">Selamanya</p>
+        <ul class="price-features">
+          <li class="checked">1 generate / hari</li>
+          <li class="checked">Karakter default (cowok/cewek)</li>
+          <li class="checked">Scene & pose default</li>
+          <li class="checked">Tidak perlu login</li>
+          <li class="unchecked">Upload karakter sendiri</li>
+          <li class="unchecked">Karakter lock</li>
+          <li class="unchecked">AI descriptor extraction</li>
+        </ul>
+        <button class="btn btn-outline" style="width:100%;" onclick="scrollToSection('karakter')">Mulai Gratis</button>
+      </div>
+
+      <!-- WEEKLY -->
+      <div class="price-card">
+        <h3>📅 Weekly</h3>
+        <div class="price-amount gradient-text">Rp 5.000</div>
+        <p class="price-period">7 hari</p>
+        <ul class="price-features">
+          <li class="checked">10 generate / hari</li>
+          <li class="checked">Upload 1 karakter sendiri</li>
+          <li class="checked">Semua scene & pose</li>
+          <li class="checked">AI descriptor</li>
+          <li class="unchecked">Karakter lock</li>
+          <li class="unchecked">Multiple characters</li>
+        </ul>
+        <button class="btn btn-outline" style="width:100%;" onclick="startCheckout('WEEKLY')">Pilih Weekly</button>
+      </div>
+
+      <!-- MONTHLY -->
+      <div class="price-card featured">
+        <div class="popular-tag">🔥 PALING POPULER</div>
+        <h3>📆 Monthly</h3>
+        <div class="price-amount gradient-text">Rp 30.000</div>
+        <p class="price-period">30 hari</p>
+        <ul class="price-features">
+          <li class="checked">100 generate / hari</li>
+          <li class="checked">Upload 3 karakter sendiri</li>
+          <li class="checked">Semua scene & pose</li>
+          <li class="checked">AI descriptor extraction</li>
+          <li class="checked">Karakter lock</li>
+          <li class="checked">Multiple characters</li>
+        </ul>
+        <button class="btn btn-primary" style="width:100%;" onclick="startCheckout('MONTHLY')">Pilih Monthly</button>
+      </div>
+
+      <!-- YEARLY -->
+      <div class="price-card">
+        <h3>🎁 Yearly</h3>
+        <div class="price-amount gradient-text">Rp 150.000</div>
+        <p class="price-period">365 hari — <strong>Hanya Rp 12.500/bulan</strong></p>
+        <ul class="price-features">
+          <li class="checked">1000 generate / hari</li>
+          <li class="checked">Upload 5 karakter sendiri</li>
+          <li class="checked">Semua scene & pose</li>
+          <li class="checked">AI descriptor extraction</li>
+          <li class="checked">Karakter lock</li>
+          <li class="checked">Multiple characters</li>
+        </ul>
+        <button class="btn btn-primary" style="width:100%;" onclick="startCheckout('YEARLY')">Pilih Yearly</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== DASHBOARD (after login) ==================== -->
+<div class="container dashboard" id="dashboard">
+  <div class="dash-header">
+    <h2>👤 Dashboard Karakter</h2>
+    <p style="color: var(--text-sec);" id="dashTierInfo"></p>
+  </div>
+
+  <!-- Character Selection -->
+  <div class="dash-card">
+    <h3>🎯 Pilih Karakter Aktif</h3>
+    <div class="char-select-grid" id="charSelectGrid">
+      <!-- Rendered by JS -->
+    </div>
+    <div id="activeCharInfo" class="status-box" style="display:none;"></div>
+  </div>
+
+  <!-- Upload Character (PRO only) -->
+  <div class="dash-card" id="uploadSection">
+    <h3>📤 Upload Karakter Baru</h3>
+    <p style="color: var(--text-sec); margin-bottom: 1rem; font-size: 0.9rem;">Upload 2 foto karakter sebagai referensi. AI otomatis ekstrak detail.</p>
+    
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput1').click()">
+      <input type="file" id="fileInput1" accept="image/*" multiple max="2">
+      <div id="uploadPlaceholder">
+        <div style="font-size: 3rem; margin-bottom: 0.5rem;">📸</div>
+        <p style="color: var(--text-sec);">Klik untuk upload 2 foto karakter</p>
+        <p style="color: #555; font-size: 0.8rem;">Format: JPG, PNG, WEBP</p>
+      </div>
+      <div class="upload-preview" id="uploadPreview"></div>
+    </div>
+
+    <div class="form-group">
+      <label>Nama Karakter</label>
+      <input type="text" id="charNameInput" placeholder="cth: Areka Casual, Areka Sport">
+    </div>
+    <button class="btn btn-primary" onclick="uploadCharacter()" id="uploadBtn" disabled>✅ Upload & Extract</button>
+    <div id="uploadResult" class="status-box" style="display:none;"></div>
+  </div>
+
+  <!-- Character List -->
+  <div class="dash-card">
+    <h3>📋 Karakter Saya</h3>
+    <div id="myCharacters">Belum ada karakter custom. Upgrade ke PRO untuk upload.</div>
+  </div>
+
+  <!-- Usage Stats -->
+  <div class="dash-card">
+    <h3>📊 Penggunaan Hari Ini</h3>
+    <div id="usageStats" class="status-box"></div>
+  </div>
+</div>
+
+<!-- ==================== FOOTER ==================== -->
+<footer>
+  <div class="container">
+    <p>© 2026 ConsistentChar. Dibuat untuk creator Indonesia.</p>
+    <p style="margin-top: 0.5rem; color: #555; font-size: 0.85rem;">Powered by AREKA Official Store</p>
+  </div>
+</footer>
+
+<!-- ==================== LOGIN MODAL ==================== -->
+<div class="modal" id="loginModal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal('loginModal')">&times;</button>
+    <h2>🔑 Login / Daftar</h2>
+    <div class="tab-btns">
+      <button class="tab-btn active" onclick="switchTab('login')">Login</button>
+      <button class="tab-btn" onclick="switchTab('signup')">Daftar</button>
+    </div>
+
+    <div class="tab-pane active" id="tabLogin">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Min 6 karakter">
+      </div>
+      <button class="btn btn-primary" onclick="loginEmail()" style="width:100%;">Login</button>
+      <div class="divider"><span>atau</span></div>
+      <button class="btn btn-outline" onclick="loginGoogle()" style="width:100%;">🔵 Login dengan Google</button>
+    </div>
+
+    <div class="tab-pane" id="tabSignup">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="signupEmail" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="signupPassword" placeholder="Min 6 karakter">
+      </div>
+      <div class="form-group">
+        <label>Konfirmasi Password</label>
+        <input type="password" id="signupConfirm" placeholder="Min 6 karakter">
+      </div>
+      <button class="btn btn-primary" onclick="signupEmail()" style="width:100%;">Daftar</button>
+      <div class="divider"><span>atau</span></div>
+      <button class="btn btn-outline" onclick="loginGoogle()" style="width:100%;">🔵 Daftar dengan Google</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PRICING MODAL ==================== -->
+<div class="modal" id="pricingModal">
+  <div class="modal-content modal-pricing">
+    <button class="modal-close" onclick="closeModal('pricingModal')">&times;</button>
+    <h2>💳 Pilih Paket</h2>
+    <div class="pricing-grid">
+      <div class="price-card" onclick="startCheckout('WEEKLY')">
+        <h3>📅 Weekly</h3>
+        <div class="price-amount">Rp 5.000</div>
+        <p class="price-period">7 hari</p>
+        <ul class="price-features">
+          <li class="checked">10 generate/hari</li>
+          <li class="checked">1 karakter custom</li>
+          <li class="checked">Semua scene & pose</li>
+        </ul>
+        <button class="btn btn-outline" style="width:100%;">Pilih</button>
+      </div>
+      <div class="price-card featured">
+        <div class="popular-tag">POPULER</div>
+        <h3>📆 Monthly</h3>
+        <div class="price-amount">Rp 30.000</div>
+        <p class="price-period">30 hari</p>
+        <ul class="price-features">
+          <li class="checked">100 generate/hari</li>
+          <li class="checked">3 karakter custom</li>
+          <li class="checked">Semua scene & pose</li>
+          <li class="checked">Karakter lock</li>
+        </ul>
+        <button class="btn btn-primary" style="width:100%;">Pilih</button>
+      </div>
+      <div class="price-card" onclick="startCheckout('YEARLY')">
+        <h3>🎁 Yearly</h3>
+        <div class="price-amount">Rp 150.000</div>
+        <p class="price-period">365 hari</p>
+        <ul class="price-features">
+          <li class="checked">1000 generate/hari</li>
+          <li class="checked">5 karakter custom</li>
+          <li class="checked">Semua scene & pose</li>
+          <li class="checked">Karakter lock</li>
+        </ul>
+        <button class="btn btn-primary" style="width:100%;">Pilih</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== QRIS MODAL ==================== -->
+<div class="modal" id="qrisModal">
+  <div class="modal-content modal-qris">
+    <button class="modal-close" onclick="closeModal('qrisModal')">&times;</button>
+    <h2>💳 Pembayaran QRIS</h2>
+    <img id="qrisImage" class="qris-img" src="" alt="QRIS">
+    <div class="status-box">
+      <p>Order: <strong id="qrisOrderId"></strong></p>
+      <p>Paket: <strong id="qrisTierName"></strong></p>
+      <p>Total: <strong id="qrisAmount" class="gradient-text"></strong></p>
+    </div>
+    <p style="color: var(--text-sec); font-size: 0.85rem;">⏳ Menunggu pembayaran...</p>
+    <button class="btn btn-outline" onclick="closeModal('qrisModal')" style="width:100%; margin-top: 1rem;">Tutup</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================================================================
+// DATA
+// ===================================================================
+const DEFAULT_CHARS = [
+  { id: 'AREKA_GIRL_001', name: 'Areka Girl', gender: 'Perempuan', type: 'free', desc: 'Default karakter cewek Indonesia' },
+  { id: 'AREKA_GUY_001', name: 'Areka Guy', gender: 'Laki-laki', type: 'free', desc: 'Default karakter cowok Indonesia' },
+];
+
+const TIERS = {
+  FREE: { name: 'Free', maxChars: 0, uploadsPerDay: 1, canUpload: false, canLock: false, allPoses: false },
+  WEEKLY: { name: 'Weekly', maxChars: 1, uploadsPerDay: 10, canUpload: true, canLock: false, allPoses: true },
+  MONTHLY: { name: 'Monthly', maxChars: 3, uploadsPerDay: 100, canUpload: true, canLock: true, allPoses: true },
+  YEARLY: { name: 'Yearly', maxChars: 5, uploadsPerDay: 1000, canUpload: true, canLock: true, allPoses: true },
+};
+
+const PRICES = { WEEKLY: 5000, MONTHLY: 30000, YEARLY: 150000 };
+
+// ===================================================================
+// STATE
+// ===================================================================
+let currentUser = null;
+let userTier = 'FREE';
+let userSub = null;
+let userChars = {};
+let activeChar = null;
+let todayUsage = 0;
+let uploadedFiles = [];
+let usageDate = '';
+
+// ===================================================================
+// AUTH
+// ===================================================================
+function init() {
+  const saved = localStorage.getItem('kc_user');
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      currentUser = data.user;
+      userTier = data.tier || 'FREE';
+      userSub = data.sub || null;
+      userChars = data.chars || {};
+      todayUsage = data.usage || 0;
+      usageDate = data.usageDate || '';
+      
+      // Reset usage if new day
+      const today = new Date().toDateString();
+      if (usageDate !== today) {
+        todayUsage = 0;
+        usageDate = today;
+        saveState();
+      }
+    } catch(e) { resetState(); }
+  }
+  renderUI();
+}
+
+function resetState() {
+  currentUser = null;
+  userTier = 'FREE';
+  userSub = null;
+  userChars = {};
+  activeChar = null;
+  todayUsage = 0;
+  usageDate = new Date().toDateString();
+  localStorage.removeItem('kc_user');
+}
+
+function saveState() {
+  localStorage.setItem('kc_user', JSON.stringify({
+    user: currentUser,
+    tier: userTier,
+    sub: userSub,
+    chars: userChars,
+    usage: todayUsage,
+    usageDate,
+  }));
+}
+
+function getTier() { return TIERS[userTier] || TIERS.FREE; }
+
+function canUploadMore() {
+  if (!currentUser) return false;
+  return getTier().canUpload && Object.keys(userChars).filter(k => userChars[k].type === 'custom').length < getTier().maxChars;
+}
+
+function canGenerate() {
+  if (!currentUser) return todayUsage < getTier().uploadsPerDay;
+  return todayUsage < getTier().uploadsPerDay;
+}
+
+// ===================================================================
+// LOGIN / SIGNUP
+// ===================================================================
+function showLogin() { document.getElementById('loginModal').style.display = 'block'; }
+
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  if (tab === 'login') {
+    document.querySelector('[onclick*="switchTab(\'login\')"]').classList.add('active');
+    document.getElementById('tabLogin').classList.add('active');
+  } else {
+    document.querySelector('[onclick*="switchTab(\'signup\')"]').classList.add('active');
+    document.getElementById('tabSignup').classList.add('active');
+  }
+}
+
+async function loginEmail() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPassword').value;
+  if (!email || !pass) return showToast('⚠️ Isi email dan password');
+  
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    currentUser = data.user;
+    if (data.subscription) {
+      userTier = data.subscription.tier;
+      userSub = data.subscription;
+    }
+    saveState();
+    closeModal('loginModal');
+    renderUI();
+    showToast('✅ Login berhasil!');
+  } else {
+    showToast('❌ ' + data.error);
+  }
+}
+
+async function signupEmail() {
+  const email = document.getElementById('signupEmail').value.trim();
+  const pass = document.getElementById('signupPassword').value;
+  const confirm = document.getElementById('signupConfirm').value;
+  if (!email || !pass || !confirm) return showToast('⚠️ Isi semua field');
+  if (pass !== confirm) return showToast('⚠️ Password tidak cocok');
+  if (pass.length < 6) return showToast('⚠️ Password min 6 karakter');
+  
+  const res = await fetch('/api/auth/signup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: pass }),
+  });
+  const data = await res.json();
+  if (data.success) {
+    currentUser = data.user;
+    saveState();
+    closeModal('loginModal');
+    renderUI();
+    showToast('✅ Daftar berhasil! Check email untuk verifikasi.');
+  } else {
+    showToast('❌ ' + data.error);
+  }
+}
+
+async function loginGoogle() {
+  showToast('🔵 Google OAuth akan diintegrasikan');
+}
+
+function logout() {
+  if (!confirm('Logout?')) return;
+  resetState();
+  renderUI();
+  showToast('🔓 Logout berhasil');
+}
+
+// ===================================================================
+// CHECKOUT
+// ===================================================================
+function startCheckout(tier) {
+  if (!currentUser) { showLogin(); return; }
+  
+  document.getElementById('qrisModal').style.display = 'block';
+  document.getElementById('qrisOrderId').textContent = 'order_' + Date.now();
+  document.getElementById('qrisTierName').textContent = tier;
+  document.getElementById('qrisAmount').textContent = 'Rp ' + PRICES[tier].toLocaleString('id-ID');
+  document.getElementById('qrisImage').src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  
+  simulatePayment(tier);
+}
+
+function simulatePayment(tier) {
+  const duration = { WEEKLY: 7, MONTHLY: 30, YEARLY: 365 };
+  setTimeout(() => {
+    const expires = new Date();
+    expires.setDate(expires.getDate() + duration[tier]);
+    
+    userTier = tier;
+    userSub = {
+      tier,
+      expires_at: expires.toISOString(),
+      created_at: new Date().toISOString(),
+    };
+    saveState();
+    closeModal('qrisModal');
+    renderUI();
+    showToast(`✅ ${TIERS[tier].name} aktif! Berlaku sampai ${expires.toLocaleDateString('id-ID')}`);
+  }, 5000);
+}
+
+// ===================================================================
+// CHARACTER MANAGEMENT
+// ===================================================================
+function selectCharacter(charId) {
+  activeChar = charId;
+  saveState();
+  renderUI();
+  showToast(`✅ Karakter ${charId} dipilih`);
+}
+
+function handleFileUpload(e) {
+  const files = Array.from(e.target.files).slice(0, 2);
+  uploadedFiles = files;
+  
+  const preview = document.getElementById('uploadPreview');
+  const placeholder = document.getElementById('uploadPlaceholder');
+  
+  if (files.length > 0) {
+    placeholder.style.display = 'none';
+    preview.innerHTML = files.map((f, i) => `<img src="${URL.createObjectURL(f)}" alt="Foto ${i+1}">`).join('');
+    document.getElementById('uploadBtn').disabled = false;
+  } else {
+    placeholder.style.display = 'block';
+    preview.innerHTML = '';
+    document.getElementById('uploadBtn').disabled = true;
+  }
+}
+
+async function uploadCharacter() {
+  const name = document.getElementById('charNameInput').value.trim();
+  if (!name) return showToast('⚠️ Masukkan nama karakter');
+  if (uploadedFiles.length === 0) return showToast('⚠️ Upload minimal 1 foto');
+  if (!canUploadMore()) return showToast('❌ Limit karakter tercapai! Upgrade paket.');
+  
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing...';
+  
+  try {
+    const photos = [];
+    const descriptors = [];
+    
+    for (const file of uploadedFiles) {
+      const base64 = await fileToBase64(file);
+      const res = await fetch('/api/character-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64.split(',')[1], mimeType: file.type, characterName: name, action: 'extract' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        photos.push(data.blobUrl);
+        descriptors.push(data.descriptor);
+      }
+    }
+    
+    const charId = 'CUSTOM_' + Date.now();
+    userChars[charId] = {
+      id: charId,
+      name,
+      photos,
+      descriptor: descriptors,
+      type: 'custom',
+      createdAt: new Date().toISOString(),
+      locked: false,
+    };
+    
+    saveState();
+    renderUI();
+    showToast(`✅ Karakter "${name}" berhasil diupload!`);
+    document.getElementById('charNameInput').value = '';
+    uploadedFiles = [];
+    document.getElementById('uploadPreview').innerHTML = '';
+    document.getElementById('uploadPlaceholder').style.display = 'block';
+    document.getElementById('uploadBtn').disabled = true;
+  } catch (err) {
+    showToast('❌ Error: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '✅ Upload & Extract';
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function deleteChar(charId) {
+  if (!confirm(`Hapus karakter ${userChars[charId]?.name}?`)) return;
+  delete userChars[charId];
+  if (activeChar === charId) activeChar = null;
+  saveState();
+  renderUI();
+  showToast('🗑️ Karakter dihapus');
+}
+
+function toggleLock(charId) {
+  if (userChars[charId]) {
+    userChars[charId].locked = !userChars[charId].locked;
+    saveState();
+    renderUI();
+  }
+}
+
+// ===================================================================
+// USAGE TRACKING
+// ===================================================================
+function incrementUsage() {
+  todayUsage++;
+  saveState();
+  renderUI();
+}
+
+// ===================================================================
+// UI RENDER
+// ===================================================================
+function renderUI() {
+  // Header
+  const tierPill = document.getElementById('headerTier');
+  const headerInfo = document.getElementById('userHeaderInfo');
+  tierPill.textContent = userTier;
+  tierPill.className = userTier === 'FREE' ? 'tier-pill tier-free' : 'tier-pill tier-pro';
+  
+  if (currentUser) {
+    headerInfo.innerHTML = `
+      <span style="color: var(--text-sec); font-size: 0.85rem;">${currentUser.email}</span>
+      <span class="tier-pill ${userTier === 'FREE' ? 'tier-free' : 'tier-pro'}">${userTier}</span>
+      <button class="btn btn-outline" onclick="logout()" style="padding:0.5rem 1rem; font-size:0.85rem;">Logout</button>
+    `;
+  } else {
+    headerInfo.innerHTML = `
+      <span class="tier-pill tier-free">FREE</span>
+      <button class="btn btn-primary" onclick="showLogin()">🔑 Login</button>
+    `;
+  }
+  
+  // Dashboard
+  const dash = document.getElementById('dashboard');
+  const uploadSection = document.getElementById('uploadSection');
+  
+  if (currentUser) {
+    dash.classList.add('active');
+    document.querySelector('.hero').style.display = 'none';
+    document.querySelector('#fitur').style.display = 'none';
+    document.querySelector('#karakter').style.display = 'none';
+    document.querySelector('#harga').style.display = 'none';
+    document.querySelector('footer').style.display = 'none';
+    
+    document.getElementById('dashTierInfo').textContent = 
+      `Tier: ${TIERS[userTier].name} | Sisa generate: ${TIERS[userTier].uploadsPerDay - todayUsage}/${TIERS[userTier].uploadsPerDay} hari ini`;
+    
+    // Upload section
+    uploadSection.style.display = TIERS[userTier].canUpload ? 'block' : 'none';
+    
+    if (!TIERS[userTier].canUpload) {
+      uploadSection.innerHTML = `
+        <div class="dash-card">
+          <h3>🔒 Upgrade untuk Upload Karakter</h3>
+          <p style="color: var(--text-sec); margin-bottom: 1rem;">FREE tier hanya bisa pakai karakter default. Upgrade ke PRO untuk upload karakter sendiri.</p>
+          <button class="btn btn-primary" onclick="startCheckout('MONTHLY')">💳 Upgrade Sekarang</button>
+        </div>
+      `;
+    }
+    
+    // Character selection
+    const charGrid = document.getElementById('charSelectGrid');
+    let allChars = [...DEFAULT_CHARS];
+    Object.values(userChars).forEach(c => allChars.push(c));
+    
+    const tier = TIERS[userTier];
+    const canLock = tier.canLock;
+    
+    charGrid.innerHTML = allChars.map(c => `
+      <div class="char-select-card ${activeChar === c.id ? 'active' : ''}" onclick="selectCharacter('${c.id}')">
+        <div class="mini-avatar" style="background: ${c.gender === 'Laki-laki' ? 'linear-gradient(135deg,#3b82f6,#6366f1)' : 'linear-gradient(135deg,#ec4899,#8b5cf6)'}">
+          ${c.gender === 'Laki-laki' ? '👨' : '👩'}
+        </div>
+        <h4 style="margin-bottom:0.25rem;">${c.name}</h4>
+        <p style="color: var(--text-sec); font-size: 0.8rem;">${c.type === 'free' ? '🆓 Default' : '⭐ Custom'}</p>
+      </div>
+    `).join('');
+    
+    // Active char info
+    const activeInfo = document.getElementById('activeCharInfo');
+    const active = allChars.find(c => c.id === activeChar);
+    if (active) {
+      activeInfo.style.display = 'block';
+      activeInfo.innerHTML = `
+        <strong>Karakter Aktif:</strong> ${active.name} (${active.gender})
+        ${active.type === 'custom' ? `<button class="btn btn-outline" onclick="deleteChar('${active.id}')" style="padding:0.3rem 0.75rem; font-size:0.8rem; margin-left:0.5rem; background:#dc2626; color:white; border:none;">🗑️</button>` : ''}
+      `;
+    } else {
+      activeInfo.style.display = 'none';
+    }
+    
+    // My characters
+    const myChars = document.getElementById('myCharacters');
+    const customChars = Object.values(userChars);
+    if (customChars.length === 0) {
+      myChars.innerHTML = '<p style="color: var(--text-sec);">Belum ada karakter custom.</p>';
+    } else {
+      myChars.innerHTML = customChars.map(c => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem; background:var(--surface2); border-radius:8px; margin-bottom:0.5rem;">
+          <div>
+            <strong>${c.name}</strong>
+            <span style="color:var(--text-sec); font-size:0.85rem; margin-left:0.5rem;">${c.photos.length} foto</span>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            ${canLock ? `<button class="btn btn-outline" onclick="toggleLock('${c.id}')" style="padding:0.3rem 0.75rem;font-size:0.8rem;">${c.locked ? '🔒' : '🔓'}</button>` : ''}
+            <button class="btn btn-outline" onclick="deleteChar('${c.id}')" style="padding:0.3rem 0.75rem;font-size:0.8rem;background:#dc2626;color:white;border:none;">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    // Usage
+    document.getElementById('usageStats').innerHTML = `
+      <p>Generate hari ini: <strong>${todayUsage} / ${TIERS[userTier].uploadsPerDay}</strong></p>
+      <p style="color: var(--text-sec); font-size:0.85rem;">Reset setiap 24 jam</p>
+    `;
+    
+  } else {
+    dash.classList.remove('active');
+    document.querySelector('.hero').style.display = 'block';
+    document.querySelector('#fitur').style.display = 'block';
+    document.querySelector('#karakter').style.display = 'block';
+    document.querySelector('#harga').style.display = 'block';
+    document.querySelector('footer').style.display = 'block';
+  }
+}
+
+// ===================================================================
+// HELPERS
+// ===================================================================
+function scrollToSection(id) {
+  document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Close modal on outside click
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('modal')) e.target.style.display = 'none';
+});
+
+// File upload handler
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('fileInput1').addEventListener('change', handleFileUpload);
+  init();
+});
+</script>
+</body>
+</html>
