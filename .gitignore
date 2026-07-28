@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Build output
+.next/
+dist/
+build/
+.turbo/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+docker-data/
+
+# Test coverage
+coverage/
+
+# Vercel
+.vercel
+
+# Temp
+tmp/
+temp/
