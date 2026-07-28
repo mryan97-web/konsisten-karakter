@@ -38,3 +38,18 @@ coverage/
 # Temp
 tmp/
 temp/
+
+# Generated / generated-on-init
+package-lock.json
+AGENTS.md
+CLAUDE.md
+README.md
+
+# NestJS
+backend/.env
+backend/dist/
+
+# Frontend generated
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
