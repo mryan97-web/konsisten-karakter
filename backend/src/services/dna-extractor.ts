@@ -165,7 +165,7 @@ Deskripsi: ${charDesc}
 
 Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang tidak terlihat jelas dari foto, isi dengan estimasi terbaik dan akhiri dengan "(estimated)". Jangan gunakan markdown dalam output.`;
 
-  // 5. Call Gemini API
+  // ─── 5. Call Gemini API with timeout + retry ───
   try {
     if (!GEMINI_API_KEY) {
       return { success: false, error: 'GEMINI_API_KEY tidak dikonfigurasi' };
@@ -178,7 +178,7 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
         {
           parts: [
             { text: systemPrompt },
-            ...imageParts.slice(0, 5), // Send 5 best images for analysis
+            ...imageParts.slice(0, 5),
           ],
         },
       ],
@@ -188,28 +188,80 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
       },
     };
 
-    const startTime = Date.now();
-    const geminiRes = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const durationMs = Date.now() - startTime;
+    // Retry loop: max 3 attempts
+    let lastError: string = 'Gagal setelah 3 percobaan';
+    let success = false;
+    let text = '';
+    let durationMs = 0;
+    let raw = '';
 
-    const raw = await geminiRes.text();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (attempt > 1) {
+        // Exponential backoff: 2s, 4s
+        const waitMs = 2000 * Math.pow(2, attempt - 2);
+        await new Promise(r => setTimeout(r, waitMs));
+      }
 
-    if (!geminiRes.ok) {
-      return {
-        success: false,
-        error: `Gemini API error (${geminiRes.status}): ${raw.slice(0, 300)}`,
-      };
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s timeout
+
+      try {
+        const geminiRes = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+        durationMs = Date.now() - startTime;
+        clearTimeout(timeoutId);
+
+        raw = await geminiRes.text();
+
+        if (!geminiRes.ok) {
+          lastError = `Gemini API error (${geminiRes.status}): ${raw.slice(0, 200)}`;
+
+          // 429 = rate limited → retry; 4xx non-429 = no retry
+          if (geminiRes.status !== 429 && geminiRes.status >= 400 && geminiRes.status < 500) {
+            break;
+          }
+          continue;
+        }
+
+        const data = JSON.parse(raw);
+        text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        if (!text) {
+          lastError = 'AI mengembalikan response kosong';
+          continue;
+        }
+
+        success = true;
+        break;
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        durationMs = Date.now() - startTime;
+
+        if (fetchErr.name === 'AbortError') {
+          lastError = `Gemini timeout setelah 30 detik (attempt ${attempt}/3)`;
+        } else {
+          lastError = `Network error (attempt ${attempt}/3): ${fetchErr.message}`;
+        }
+      }
     }
 
-    const data = JSON.parse(raw);
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!success) {
+      // Log failed attempt ke DB untuk debugging
+      await sb.from('ai_usage').insert({
+        user_id: userId,
+        job_type: 'dna_extraction',
+        model: GEMINI_MODEL,
+        images_analyzed: imageParts.length,
+        duration_ms: durationMs,
+        estimated_cost_usd: 0,
+      }).maybeSingle();
 
-    if (!text) {
-      return { success: false, error: 'Tidak ada response dari AI' };
+      return { success: false, error: lastError };
     }
 
     // 6. Parse JSON from response (handle markdown code blocks)
@@ -271,7 +323,7 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
       model: GEMINI_MODEL,
       images_analyzed: imageParts.length,
       estimated_cost_usd: imageParts.length * 0.002, // Rough estimate
-      duration_ms,
+      duration_ms: durationMs,
     });
 
     return {

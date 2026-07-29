@@ -1,211 +1,55 @@
-'use client';
+import { cookies } from 'next/headers';
+import DashboardClient from './DashboardClient';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import CreateCharacterForm from '@/components/CreateCharacterForm';
-import UploadPhotoModal from '@/components/UploadPhotoModal';
-import DnaAnalysisModal from '@/components/DnaAnalysisModal';
+async function fetchApi(path: string, token: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000';
+  const res = await fetch(`${baseUrl}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  return res.json();
+}
 
-type UserData = {
-  user_id: string;
-  email: string;
-  display_name: string;
-  tier: string;
-  status: string;
-  subscription: any;
-};
+export default async function DashboardPage() {
+  // Coba baca session dari cookie (hanya works dengan @supabase/ssr)
+  // Jika tidak ada, client component handle sendiri via localStorage
+  let initialUser = null;
+  let initialCharacters: any[] = [];
 
-type Character = {
-  char_id: string;
-  name: string;
-  gender: string | null;
-  type: string;
-  share_mode: string;
-  is_locked: boolean;
-  prompt_count: number;
-  created_at: string;
-};
+  try {
+    const cookieStore = await cookies();
+    const sbCookieName = process.env.NEXT_PUBLIC_SUPABASE_COOKIE || '';
+    const supabaseCookie = sbCookieName ? cookieStore.get(sbCookieName) : null;
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<UserData | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [uploadChar, setUploadChar] = useState<{ char_id: string; name: string } | null>(null);
-  const [analyzeChar, setAnalyzeChar] = useState<{ char_id: string; name: string; imageCount: number } | null>(null);
+    if (supabaseCookie?.value) {
+      let session: any;
+      try {
+        session = JSON.parse(supabaseCookie.value);
+      } catch {
+        // Try array format [access_token, refresh_token, user]
+        const parsed = JSON.parse(supabaseCookie.value);
+        if (Array.isArray(parsed)) {
+          session = { access_token: parsed[0] };
+        }
+      }
 
-  const loadData = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      router.push('/');
-      return;
+      if (session?.access_token) {
+        const [userData, charData] = await Promise.all([
+          fetchApi('/api/auth/me', session.access_token),
+          fetchApi('/api/character', session.access_token),
+        ]);
+        if (userData.success) initialUser = JSON.parse(JSON.stringify(userData.data));
+        if (charData.success) initialCharacters = JSON.parse(JSON.stringify(charData.data));
+      }
     }
-
-    const headers = { Authorization: `Bearer ${session.access_token}` };
-
-    const [userRes, charRes] = await Promise.all([
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/auth/me`, { headers }),
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character`, { headers }),
-    ]);
-
-    const userData = await userRes.json();
-    const charData = await charRes.json();
-
-    if (userData.success) setUser(userData.data);
-    if (charData.success) setCharacters(charData.data);
-    setLoading(false);
-  };
-
-  useEffect(() => { loadData(); }, [router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
-  };
-
-  const handleCreated = (char: Character) => {
-    setCharacters((prev) => [char, ...prev]);
-    setShowCreate(false);
-    setUploadChar({ char_id: char.char_id, name: char.name });
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
-        <div className="text-[var(--muted)]">Memuat...</div>
-      </div>
-    );
+  } catch {
+    // Silent fail — client component will handle auth
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      {/* ─── Header ─── */}
-      <header className="border-b border-[var(--border)] bg-[var(--card)]">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-          <span className="text-xl font-bold tracking-tight">ConsistentChar</span>
-          <div className="flex items-center gap-4">
-            <span className="rounded-full bg-[var(--primary)]/10 px-3 py-1 text-xs font-medium text-[var(--primary)] uppercase">
-              {user?.tier || 'free'}
-            </span>
-            <span className="text-sm text-[var(--muted)]">{user?.display_name || user?.email}</span>
-            <button onClick={handleLogout} className="btn btn-secondary text-sm px-4 py-2">
-              Keluar
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ─── Main ─── */}
-      <main className="mx-auto max-w-6xl px-6 py-12">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="mt-1 text-[var(--muted)]">Kelola karakter AI dan prompt kamu</p>
-          </div>
-          <button onClick={() => setShowCreate(true)} className="btn btn-primary px-5 py-2.5">
-            + Buat Karakter
-          </button>
-        </div>
-
-        {/* ─── Stats ─── */}
-        <div className="mb-12 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">{characters.length}</div>
-            <div className="mt-1 text-sm text-[var(--muted)]">Karakter</div>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">
-              {characters.reduce((sum, c) => sum + c.prompt_count, 0)}
-            </div>
-            <div className="mt-1 text-sm text-[var(--muted)]">Total Prompt</div>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">
-              {user?.tier === 'free' ? `${Math.max(0, 30 - characters.reduce((s, c) => s + c.prompt_count, 0))}` : '∞'}
-            </div>
-            <div className="mt-1 text-sm text-[var(--muted)]">Sisa Prompt</div>
-          </div>
-        </div>
-
-        {/* ─── Character Grid or Empty State ─── */}
-        {characters.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] py-24">
-            <div className="mb-4 text-6xl">🎭</div>
-            <h2 className="mb-2 text-xl font-semibold">Belum Ada Karakter</h2>
-            <p className="mb-6 max-w-md text-center text-[var(--muted)]">
-              Buat karakter AI pertamamu. Upload 5-20 foto, AI akan mengekstrak DNA karakter dan siap digunakan untuk generate prompt.
-            </p>
-            <button onClick={() => setShowCreate(true)} className="btn btn-primary px-6 py-3">
-              + Buat Karakter
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {characters.map((char) => (
-              <div
-                key={char.char_id}
-                className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 hover:border-[var(--muted)] transition-colors cursor-pointer"
-                onClick={() => router.push(`/character/${char.char_id}`)}
-              >
-                <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/10 text-xl">
-                    {char.gender === 'Perempuan' ? '👩' : char.gender === 'Laki-laki' ? '👨' : '🎭'}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{char.name}</div>
-                    <div className="text-xs text-[var(--muted)]">
-                      {char.gender || 'No gender'} · {char.is_locked ? '🔒 Locked' : '📝 Draft'}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
-                  <span>{char.prompt_count} prompt</span>
-                  {char.type === 'default' && <span className="rounded bg-[var(--muted-bg)] px-2 py-0.5">Default</span>}
-                  {char.type === 'custom' && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAnalyzeChar({ char_id: char.char_id, name: char.name, imageCount: 0 });
-                      }}
-                      className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--primary)] hover:bg-[var(--primary)]/20 transition-colors"
-                    >
-                      🧬 Analisis DNA
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-
-      {showCreate && (
-        <CreateCharacterForm
-          onClose={() => setShowCreate(false)}
-          onCreated={handleCreated}
-        />
-      )}
-
-      {uploadChar && (
-        <UploadPhotoModal
-          charId={uploadChar.char_id}
-          charName={uploadChar.name}
-          onClose={() => setUploadChar(null)}
-          onComplete={() => setUploadChar(null)}
-        />
-      )}
-
-      {analyzeChar && (
-        <DnaAnalysisModal
-          charId={analyzeChar.char_id}
-          charName={analyzeChar.name}
-          imageCount={analyzeChar.imageCount}
-          onClose={() => setAnalyzeChar(null)}
-          onComplete={() => setAnalyzeChar(null)}
-        />
-      )}
-    </div>
+    <DashboardClient
+      initialUser={initialUser}
+      initialCharacters={initialCharacters}
+    />
   );
 }

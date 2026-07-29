@@ -5,16 +5,22 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { HTTPException } from 'hono/http-exception';
 import { withRequestId } from './middleware/request-id.js';
+import { withRateLimit } from './middleware/rate-limit.js';
 
 const app = new Hono();
 
 // ─── Global middleware ───
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,https://konsisten-karakter.vercel.app')
+  .split(',')
+  .map(s => s.trim());
+
 app.use('*', cors({
-  origin: ['http://localhost:3000', 'https://consistent-char.vercel.app'],
+  origin: allowedOrigins,
   credentials: true,
 }));
 app.use('*', logger());
 app.use('*', withRequestId);
+app.use('/api/*', withRateLimit(100, 60_000)); // 100 req/min per IP
 
 // ─── Health ───
 app.get('/api/health', (c) => {

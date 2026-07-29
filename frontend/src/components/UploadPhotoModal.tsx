@@ -4,6 +4,12 @@ import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
+const MIN_FILES = 5;
+const MAX_FILES = 20;
+const MAX_FILE_SIZE_MB = 5;
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_RETRIES = 3;
+
 type UploadPhotoModalProps = {
   charId: string;
   charName: string;
@@ -11,72 +17,62 @@ type UploadPhotoModalProps = {
   onComplete: () => void;
 };
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const MIN_FILES = 5;
-const MAX_FILES = 20;
-
 export default function UploadPhotoModal({ charId, charName, onClose, onComplete }: UploadPhotoModalProps) {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
-  const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [failedFiles, setFailedFiles] = useState<{ index: number; name: string; reason: string }[]>([]);
 
-  const addFiles = useCallback((newFiles: FileList | File[]) => {
+  const addFiles = useCallback((incoming: FileList | File[]) => {
+    const newFiles = Array.from(incoming);
     const valid: File[] = [];
+    const newPreviews: string[] = [];
     const errors: string[] = [];
-    const existingCount = files.length;
 
-    for (let i = 0; i < newFiles.length; i++) {
-      const f = newFiles[i];
-      if (!ALLOWED_TYPES.includes(f.type)) {
-        errors.push(`"${f.name}" bukan JPG/PNG/WEBP`);
+    for (const f of newFiles) {
+      if (!ACCEPTED_TYPES.includes(f.type)) {
+        errors.push(`${f.name}: format tidak didukung`);
         continue;
       }
-      if (f.size > MAX_FILE_SIZE) {
-        errors.push(`"${f.name}" terlalu besar (max 5MB)`);
+      if (f.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        errors.push(`${f.name}: maksimal ${MAX_FILE_SIZE_MB}MB`);
         continue;
-      }
-      if (existingCount + files.length + valid.length >= MAX_FILES) {
-        errors.push(`Maksimal ${MAX_FILES} foto`);
-        break;
       }
       valid.push(f);
+      newPreviews.push(URL.createObjectURL(f));
     }
 
-    if (errors.length > 0) setError(errors.join('; '));
+    const combined = [...files, ...valid].slice(0, MAX_FILES);
+    setFiles(combined);
+    setPreviews((prev) => [...prev, ...newPreviews].slice(0, MAX_FILES));
 
-    setFiles((prev) => [...prev, ...valid]);
-
-    // Generate previews
-    const newPreviews = valid.map((f) => URL.createObjectURL(f));
-    setPreviews((prev) => [...prev, ...newPreviews]);
-  }, [files.length]);
-
-  const removeFile = (index: number) => {
-    URL.revokeObjectURL(previews[index]);
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-    setPreviews((prev) => prev.filter((_, i) => i !== index));
-  };
+    if (errors.length > 0) {
+      setError(errors.join('; '));
+    } else {
+      setError('');
+    }
+  }, [files]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
+    addFiles(e.dataTransfer.files);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(e.target.files);
   };
 
-  const handleDragLeave = () => setDragOver(false);
-
-  const handleSelect = () => inputRef.current?.click();
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => {
+      URL.revokeObjectURL(prev[index]);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   const handleUpload = async () => {
     if (files.length < MIN_FILES) {
@@ -87,38 +83,66 @@ export default function UploadPhotoModal({ charId, charName, onClose, onComplete
     setUploading(true);
     setError('');
     setProgress(0);
+    setFailedFiles([]);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push('/');
-        return;
-      }
+      if (!session) { router.push('/'); return; }
 
-      const formData = new FormData();
-      files.forEach((f) => formData.append('files', f));
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000';
+      let totalUploaded = 0;
+      let retries = 0;
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character/${charId}/upload`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: formData,
+      // Upload file satu per satu dengan retry
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append('files', files[i]);
+
+        // Coba upload dengan retry
+        let lastError = '';
+        let success = false;
+
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          if (attempt > 0) {
+            await new Promise(r => setTimeout(r, 1000 * attempt)); // 1s, 2s, 3s
+          }
+
+          try {
+            const res = await fetch(`${baseUrl}/api/character/${charId}/upload`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${session.access_token}` },
+              body: formData,
+            });
+            const data = await res.json();
+            if (data.success) {
+              totalUploaded++;
+              success = true;
+              break;
+            }
+            lastError = data.error?.message || 'Upload gagal';
+          } catch {
+            lastError = 'Gagal terhubung ke server';
+          }
         }
-      );
 
-      const data = await res.json();
+        if (!success) {
+          setFailedFiles(prev => [...prev, { index: i, name: files[i].name, reason: lastError }]);
+        }
 
-      if (!data.success) {
-        setError(data.error?.message || 'Gagal upload');
-        return;
+        setProgress(Math.round(((i + 1) / files.length) * 100));
       }
 
-      onComplete();
-      router.refresh();
-    } catch (err) {
+      if (totalUploaded >= MIN_FILES) {
+        onComplete();
+        router.refresh();
+      } else if (totalUploaded > 0) {
+        setError(`${totalUploaded} foto berhasil diupload. Minimal ${MIN_FILES} foto. Upload lagi.`);
+        setFiles([]);
+        setPreviews([]);
+      } else {
+        setError('Gagal upload semua foto. Cek koneksi dan coba lagi.');
+      }
+    } catch {
       setError('Gagal terhubung ke server');
     } finally {
       setUploading(false);
@@ -131,7 +155,6 @@ export default function UploadPhotoModal({ charId, charName, onClose, onComplete
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="w-full max-w-2xl rounded-xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
-        {/* ─── Header ─── */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold">Upload Foto</h2>
@@ -139,132 +162,113 @@ export default function UploadPhotoModal({ charId, charName, onClose, onComplete
               Karakter: <span className="font-medium text-[var(--foreground)]">{charName}</span>
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[var(--muted)] hover:text-white transition-colors text-xl leading-none"
+          <button onClick={onClose} className="text-[var(--muted)] hover:text-white transition-colors text-xl leading-none">&times;</button>
+        </div>
+
+        {/* ─── Aspect Ratio Guide ─── */}
+        <div className="mb-4 rounded-lg bg-[var(--muted-bg)] p-3 text-xs text-[var(--muted)]">
+          <p className="font-medium text-[var(--foreground)] mb-1">📐 Tips Upload:</p>
+          <ul className="list-disc list-inside space-y-0.5">
+            <li>Gunakan foto dengan rasio <strong>1:1 (square)</strong> atau minimal <strong>3:4</strong></li>
+            <li>Hindari foto terlalu gelap atau terlalu terang (backlight)</li>
+            <li>Wajah harus terlihat jelas — minimal 512px di dimensi terpendek</li>
+            <li>Variasi angle: depan, samping (45°), lingkungan natural</li>
+            <li>Format: JPG/PNG/WEBP · Max {MAX_FILE_SIZE_MB}MB per file · {MIN_FILES}-{MAX_FILES} foto</li>
+          </ul>
+        </div>
+
+        {/* ─── Drop Zone / File Picker ─── */}
+        {files.length < MAX_FILES && (
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
+            onClick={() => fileInputRef.current?.click()}
+            className="mb-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--muted-bg)] py-10 transition-colors hover:border-[var(--primary)]"
           >
-            &times;
-          </button>
-        </div>
-
-        {/* ─── Drop Zone ─── */}
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handleSelect}
-          className={`mb-6 cursor-pointer rounded-xl border-2 border-dashed p-10 text-center transition-colors ${
-            dragOver
-              ? 'border-[var(--primary)] bg-[var(--primary)]/5'
-              : 'border-[var(--border)] bg-[var(--muted-bg)] hover:border-[var(--muted)]'
-          }`}
-        >
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(e) => e.target.files && addFiles(e.target.files)}
-          />
-          <div className="mb-2 text-4xl">
-            {dragOver ? '📸' : '🖼️'}
-          </div>
-          <p className="font-medium">
-            {dragOver ? 'Lepaskan foto di sini' : 'Klik atau tarik foto ke sini'}
-          </p>
-          <p className="mt-1 text-xs text-[var(--muted)]">
-            JPG, PNG, atau WEBP · max 5MB/file · {MIN_FILES}-{MAX_FILES} foto
-          </p>
-        </div>
-
-        {/* ─── File Count ─── */}
-        {fileCount > 0 && (
-          <div className="mb-4 flex items-center justify-between text-sm">
-            <span className="text-[var(--muted)]">{fileCount} foto dipilih</span>
-            <span
-              className={
-                fileCount >= MIN_FILES
-                  ? 'text-green-400'
-                  : fileCount >= 1
-                    ? 'text-yellow-400'
-                    : 'text-[var(--muted)]'
-              }
-            >
-              {fileCount >= MIN_FILES
-                ? '✅ Siap upload'
-                : `Perlu ${MIN_FILES - fileCount} lagi (min ${MIN_FILES})`}
-            </span>
+            <div className="mb-2 text-4xl">📁</div>
+            <p className="text-sm font-medium">Klik atau drag & drop foto</p>
+            <p className="text-xs text-[var(--muted)]">
+              {files.length}/{MAX_FILES} · JPG, PNG, WEBP
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
           </div>
         )}
 
-        {/* ─── Preview Grid ─── */}
+        {/* ─── Preview Gallery ─── */}
         {previews.length > 0 && (
-          <div className="mb-6 grid grid-cols-4 gap-3 sm:grid-cols-5">
-            {previews.map((src, i) => (
-              <div key={i} className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--border)]">
-                <img
-                  src={src}
-                  alt={`Foto ${i + 1}`}
-                  className="h-full w-full object-cover"
-                />
-                <button
-                  onClick={() => removeFile(i)}
-                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500/80 text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  &times;
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1.5 pb-1 pt-4">
-                  <span className="text-[10px] text-white/80">{i + 1}</span>
+          <div className="mb-4">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+              {previews.map((src, i) => (
+                <div key={i} className="group relative aspect-square overflow-hidden rounded-lg border border-[var(--border)]">
+                  <img src={src} alt={`Preview ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => removeFile(i)}
+                    disabled={uploading}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                  >
+                    &times;
+                  </button>
+                  <div className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-xs text-white/70">
+                    #{i + 1}
+                  </div>
                 </div>
-              </div>
+              ))}
+              {Array.from({ length: Math.max(0, MIN_FILES - previews.length) }).map((_, i) => (
+                <div key={`placeholder-${i}`} className="aspect-square rounded-lg border border-dashed border-[var(--border)] bg-[var(--muted-bg)] flex items-center justify-center text-2xl text-[var(--muted)] opacity-40">
+                  +
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-[var(--muted)]">
+              {fileCount >= MIN_FILES
+                ? `✅ ${fileCount} foto siap upload`
+                : `📷 ${fileCount}/${MIN_FILES} foto — upload ${MIN_FILES - fileCount} lagi`}
+            </p>
+          </div>
+        )}
+
+        {/* ─── Upload Progress ─── */}
+        {uploading && (
+          <div className="mb-4">
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-[var(--muted)]">Uploading...</span>
+              <span className="text-[var(--primary)]">{progress}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--muted-bg)]">
+              <div className="h-full rounded-full bg-[var(--primary)] transition-all duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+
+        {/* ─── Failed Files ─── */}
+        {failedFiles.length > 0 && (
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 p-3">
+            <p className="text-xs font-medium text-red-400 mb-1">⚠️ {failedFiles.length} file gagal (akan di-retry otomatis):</p>
+            {failedFiles.map((f, i) => (
+              <p key={i} className="text-xs text-[var(--muted)] pl-2">{f.name}: {f.reason}</p>
             ))}
           </div>
         )}
 
         {/* ─── Error ─── */}
-        {error && (
-          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2.5 text-sm text-red-400">
-            {error}
-          </div>
+        {error && !failedFiles.length && (
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2.5 text-sm text-red-400">{error}</div>
         )}
-
-        {/* ─── Progress ─── */}
-        {uploading && (
-          <div className="mb-4">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--muted-bg)]">
-              <div
-                className="h-full rounded-full bg-[var(--primary)] transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="mt-1 text-xs text-[var(--muted)]">Mengupload... {progress}%</p>
-          </div>
-        )}
-
-        {/* ─── Info ─── */}
-        <div className="mb-6 rounded-lg bg-[var(--muted-bg)] p-4 text-xs text-[var(--muted)]">
-          <p className="font-medium mb-1 text-[var(--foreground)]">📋 Tips Upload:</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>Gunakan foto dengan wajah jelas dan ekspresi natural</li>
-            <li>Variasi angle: depan, samping, 3/4, atas/bawah</li>
-            <li>Hindari aksesoris yang menutupi wajah (masker, kacamata gelap)</li>
-            <li>Resolusi minimal 512px</li>
-            <li>Setelah upload, AI akan mengekstrak DNA karakter</li>
-          </ul>
-        </div>
 
         {/* ─── Actions ─── */}
         <div className="flex gap-3">
-          <button onClick={onClose} className="btn btn-secondary flex-1 px-4 py-2.5">
-            Batal
+          <button onClick={onClose} disabled={uploading} className="btn btn-secondary flex-1 px-4 py-2.5 disabled:opacity-50">
+            {uploading ? 'Uploading...' : 'Batal'}
           </button>
-          <button
-            onClick={handleUpload}
-            disabled={!canUpload}
-            className="btn btn-primary flex-1 px-4 py-2.5 disabled:opacity-50"
-          >
-            {uploading ? 'Mengupload...' : `Upload ${fileCount} Foto`}
+          <button onClick={handleUpload} disabled={!canUpload} className="btn btn-primary flex-1 px-4 py-2.5 disabled:opacity-50">
+            {uploading ? `Upload ${progress}%` : `📤 Upload ${fileCount} Foto`}
           </button>
         </div>
       </div>
