@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { getSupabase, getSupabaseAdmin } from '../lib/supabase';
 import { withAuth } from '../middleware/auth.js';
+import { E, ok, created } from '../shared/response';
 
 const auth = new Hono();
 
@@ -8,20 +9,12 @@ const auth = new Hono();
 auth.post('/register', async (c) => {
   const { email, password, display_name, agreed_age_17, agreed_tos } = await c.req.json();
 
-  // Validation
-  if (!email || !password) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email dan password wajib diisi' } }, 400);
-  }
-  if (password.length < 6) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password minimal 6 karakter' } }, 400);
-  }
-  if (!agreed_age_17 || !agreed_tos) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Setujui syarat dan ketentuan' } }, 400);
-  }
+  if (!email || !password) return E.VALIDATION('Email dan password wajib diisi');
+  if (password.length < 6) return E.VALIDATION('Password minimal 6 karakter');
+  if (!agreed_age_17 || !agreed_tos) return E.VALIDATION('Setujui syarat dan ketentuan');
 
   const sbAdmin = getSupabaseAdmin();
 
-  // Sign up via Supabase Auth
   const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
     email,
     password,
@@ -30,234 +23,114 @@ auth.post('/register', async (c) => {
   });
 
   if (authError) {
-    if (authError.message.includes('already')) {
-      return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email sudah terdaftar' } }, 400);
+    if (authError.message?.includes('already registered')) {
+      return E.VALIDATION('Email sudah terdaftar');
     }
-    return c.json({ success: false, error: { code: 'AUTH_ERROR', message: authError.message } }, 500);
+    return E.INTERNAL(authError.message);
   }
 
-  // Insert into public.users
-  const sb = getSupabase();
-  const { data: user } = await sb
-    .from('users')
-    .insert({
-      user_id: authData.user.id,
-      email,
-      display_name: display_name || email.split('@')[0],
-      tier: 'free',
-      agreed_age_17,
-      agreed_tos,
-    })
-    .select('user_id, email, display_name, tier, created_at')
-    .single();
+  const uid = authData.user!.id;
 
-  return c.json({
-    success: true,
-    data: user || { user_id: authData.user.id, email, display_name, tier: 'free' },
-    meta: { message: 'Pendaftaran berhasil' },
-  }, 201);
+  // Create public.users record
+  const { error: profileError } = await sbAdmin.from('users').insert({
+    user_id: uid,
+    email,
+    display_name: display_name || email.split('@')[0],
+    tier: 'free',
+    status: 'active',
+    agreed_age_17: true,
+    agreed_tos: true,
+  });
+
+  if (profileError) {
+    // Rollback — delete auth user
+    await sbAdmin.auth.admin.deleteUser(uid);
+    return E.INTERNAL('Gagal membuat profil. Coba lagi.');
+  }
+
+  return created({
+    user_id: uid,
+    email,
+    display_name: display_name || email.split('@')[0],
+    tier: 'free',
+  });
 });
 
 // ─── POST /api/auth/login ───
 auth.post('/login', async (c) => {
   const { email, password } = await c.req.json();
 
-  if (!email || !password) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email dan password wajib diisi' } }, 400);
+  if (!email || !password) return E.VALIDATION('Email dan password wajib diisi');
+
+  const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
+
+  if (error || !data.session) {
+    return E.UNAUTHORIZED('Email atau password salah');
   }
 
-  const sb = getSupabase();
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    if (error.message.includes('Invalid')) {
-      return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Email atau password salah' } }, 401);
-    }
-    return c.json({ success: false, error: { code: 'AUTH_ERROR', message: error.message } }, 500);
-  }
-
-  // Get user profile from public.users
-  const { data: user } = await sb
-    .from('users')
-    .select('user_id, email, display_name, avatar_url, tier, status')
-    .eq('user_id', data.user.id)
-    .single();
-
-  return c.json({
-    success: true,
-    data: {
-      access_token: data.session.access_token,
-      refresh_token: data.session.refresh_token,
-      expires_in: data.session.expires_in,
-      user: user || {
-        user_id: data.user.id,
-        email: data.user.email,
-        display_name: data.user.email?.split('@')[0],
-        tier: 'free',
-      },
-    },
-  });
-});
-
-// ─── POST /api/auth/google ───
-auth.post('/google', async (c) => {
-  const { id_token } = await c.req.json();
-
-  if (!id_token) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'ID token Google wajib diisi' } }, 400);
-  }
-
-  const sb = getSupabase();
-  const { data, error } = await sb.auth.signInWithIdToken({
-    provider: 'google',
-    token: id_token,
-  });
-
-  if (error) {
-    return c.json({ success: false, error: { code: 'AUTH_ERROR', message: error.message } }, 500);
-  }
-
-  // Upsert into public.users
-  const email = data.user?.email || '';
-  const { data: user } = await sb
-    .from('users')
-    .upsert({
-      user_id: data.user.id,
-      email,
-      display_name: data.user.user_metadata?.full_name || email.split('@')[0],
-      avatar_url: data.user.user_metadata?.avatar_url,
-      auth_provider: 'google',
-      google_id: data.user.id,
-      tier: 'free',
-      agreed_age_17: true,
-      agreed_tos: true,
-    }, { onConflict: 'email' })
-    .select('user_id, email, display_name, avatar_url, tier')
-    .single();
-
-  return c.json({
-    success: true,
-    data: {
-      access_token: data.session?.access_token,
-      refresh_token: data.session?.refresh_token,
-      user: user || { user_id: data.user.id, email, tier: 'free' },
-    },
-  });
-});
-
-// ─── GET /api/auth/me ───
-auth.get('/me', withAuth, async (c) => {
-  const userId = c.var.userId;
-  const userData = c.var.user;
-
-  // Load subscription separately
-  const sb = getSupabase();
-  const { data: sub } = await sb
-    .from('subscriptions')
-    .select('plan, status, expires_at, grace_until')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return c.json({
-    success: true,
-    data: {
-      user_id: userId,
-      email: userData.email,
-      display_name: userData.email.split('@')[0],
-      tier: userData.tier,
-      status: userData.status,
-      subscription: sub || null,
-    },
-  });
-});
-
-// ─── POST /api/auth/forgot-password ───
-auth.post('/forgot-password', async (c) => {
-  const { email } = await c.req.json();
-
-  if (!email) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email wajib diisi' } }, 400);
-  }
-
-  await getSupabaseAdmin().auth.admin.generateLink({
-    type: 'recovery',
-    email,
-  });
-
-  // Always return success — anti-enumeration
-  return c.json({
-    success: true,
-    data: { message: 'Jika email terdaftar, link reset password telah dikirim' },
-  });
-});
-
-// ─── POST /api/auth/reset-password ───
-auth.post('/reset-password', async (c) => {
-  const authHeader = c.req.header('Authorization') || '';
-  const token = authHeader.slice(7);
-
-  if (!token) {
-    return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token reset wajib diisi' } }, 401);
-  }
-
-  const { password } = await c.req.json();
-
-  if (!password || password.length < 6) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password minimal 6 karakter' } }, 400);
-  }
-
-  const sb = getSupabase();
-  const { data: { user }, error: userError } = await sb.auth.getUser(token);
-
-  if (userError || !user) {
-    return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token tidak valid atau expired' } }, 401);
-  }
-
-  const { error: updateError } = await getSupabaseAdmin().auth.admin.updateUserById(user.id, {
-    password,
-  });
-
-  if (updateError) {
-    return c.json({ success: false, error: { code: 'AUTH_ERROR', message: updateError.message } }, 500);
-  }
-
-  return c.json({
-    success: true,
-    data: { message: 'Password berhasil direset' },
-  });
-});
-
-// ─── POST /api/auth/refresh ───
-auth.post('/refresh', async (c) => {
-  const { refresh_token } = await c.req.json();
-
-  if (!refresh_token) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Refresh token wajib diisi' } }, 400);
-  }
-
-  const { data, error } = await getSupabase().auth.refreshSession({ refresh_token });
-
-  if (error) {
-    return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Refresh token tidak valid' } }, 401);
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      access_token: data.session?.access_token,
-      refresh_token: data.session?.refresh_token,
-      expires_in: data.session?.expires_in,
+  return ok({
+    token: data.session.access_token,
+    user: {
+      id: data.user.id,
+      email: data.user.email,
     },
   });
 });
 
 // ─── POST /api/auth/logout ───
-auth.post('/logout', withAuth, async (c) => {
-  await getSupabaseAdmin().auth.admin.signOut(c.var.userId);
-  return c.json({ success: true, data: { message: 'Logout berhasil' } });
+auth.post('/logout', async (c) => {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return E.UNAUTHORIZED();
+
+  const token = authHeader.slice(7);
+  await getSupabaseAdmin().auth.admin.signOut(token);
+
+  return ok({ message: 'Berhasil logout' });
+});
+
+// ─── GET /api/auth/me ───
+auth.get('/me', withAuth, async (c) => {
+  const user = c.var.user;
+  return ok(user);
+});
+
+// ─── POST /api/auth/convert-demo ───
+auth.post('/convert-demo', withAuth, async (c) => {
+  const userId = c.var.userId;
+  const { fingerprint } = await c.req.json();
+
+  if (!fingerprint) return E.VALIDATION('Fingerprint diperlukan');
+
+  const sb = getSupabaseAdmin();
+
+  // Find demo session by fingerprint
+  const { data: session } = await sb
+    .from('demo_sessions')
+    .select('session_id, char_id, prompt_count')
+    .eq('fingerprint', fingerprint)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!session) return E.NOT_FOUND('Demo session tidak ditemukan');
+
+  // Transfer ownership: assign all demo data to real user
+  await sb.from('characters')
+    .update({ user_id: userId })
+    .eq('char_id', session.char_id);
+
+  await sb.from('character_images')
+    .update({ user_id: userId })
+    .eq('char_id', session.char_id);
+
+  await sb.from('demo_sessions')
+    .update({ status: 'converted', converted_at: new Date().toISOString(), converted_user_id: userId })
+    .eq('session_id', session.session_id);
+
+  return ok({
+    message: 'Data demo berhasil dipindahkan ke akun Anda!',
+    char_id: session.char_id,
+    prompt_count: session.prompt_count,
+  });
 });
 
 export default auth;

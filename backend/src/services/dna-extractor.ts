@@ -26,13 +26,13 @@ export async function extractCharacterDna(
 ): Promise<DnaExtractionResult> {
   const sb = getSupabaseAdmin();
 
-  // 1. Get character info
-  const { data: char } = await sb
+  // 1. Get character info — userId is optional (null for demo)
+  let query = sb
     .from('characters')
     .select('name, gender, description')
-    .eq('char_id', charId)
-    .eq('user_id', userId)
-    .single();
+    .eq('char_id', charId);
+  if (userId) query = query.eq('user_id', userId);
+  const { data: char } = await query.single();
 
   if (!char) {
     return { success: false, error: 'Karakter tidak ditemukan' };

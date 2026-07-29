@@ -1,5 +1,6 @@
 import { createMiddleware } from 'hono/factory';
 import { getSupabaseAdmin } from '../lib/supabase';
+import { E } from '../shared/response';
 
 type DemoUser = {
   type: 'demo';
@@ -15,19 +16,12 @@ declare module 'hono' {
   }
 }
 
-/**
- * Middleware yang membaca X-Demo-Session + X-Device-Fingerprint header
- * untuk autentikasi demo user (tanpa JWT).
- */
 export const withDemo = createMiddleware(async (c, next) => {
   const sessionId = c.req.header('x-demo-session');
   const fingerprint = c.req.header('x-device-fingerprint');
 
   if (!sessionId || !fingerprint) {
-    return c.json({
-      success: false,
-      error: { code: 'DEMO_REQUIRED', message: 'Header demo session diperlukan' },
-    }, 401);
+    return E.VALIDATION('Header demo session diperlukan');
   }
 
   const sb = getSupabaseAdmin();
@@ -40,19 +34,12 @@ export const withDemo = createMiddleware(async (c, next) => {
     .maybeSingle();
 
   if (!session) {
-    return c.json({
-      success: false,
-      error: { code: 'DEMO_INVALID', message: 'Session demo tidak valid atau sudah expired' },
-    }, 401);
+    return E.DEMO_LIMIT('Session demo tidak valid atau sudah expired');
   }
 
-  // Check TTL
   if (new Date(session.expires_at) < new Date()) {
     await sb.from('demo_sessions').update({ status: 'expired' }).eq('session_id', sessionId);
-    return c.json({
-      success: false,
-      error: { code: 'DEMO_EXPIRED', message: 'Session demo sudah habis. Mulai demo baru atau daftar akun.' },
-    }, 401);
+    return E.DEMO_EXPIRED();
   }
 
   c.set('demoUser', {

@@ -1,49 +1,23 @@
 import { Hono } from 'hono';
 import { getSupabaseAdmin } from '../lib/supabase';
 import { withDemo } from '../middleware/demo';
-import { validateImage } from '../lib/storage';
+import { CharacterService } from '../services/character-service';
+import { UploadService } from '../services/upload-service';
 import { extractCharacterDna } from '../services/dna-extractor';
+import { E, ok, created } from '../shared/response';
+import { CONSTANTS } from '../shared/constants';
 
 const demoChar = new Hono();
 
 // ─── GET /api/demo/char ───
 demoChar.get('/char', withDemo, async (c) => {
   const demo = c.var.demoUser!;
-  const sb = getSupabaseAdmin();
+  const full = await CharacterService.getFullCharacter(demo.char_id);
 
-  const { data: char } = await sb
-    .from('characters')
-    .select('char_id, name, gender, type, description, is_locked, prompt_count, created_at')
-    .eq('char_id', demo.char_id)
-    .single();
-
-  if (!char) {
-    return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Demo karakter tidak ditemukan' } }, 404);
-  }
-
-  const { data: images } = await sb
-    .from('character_images')
-    .select('image_id, blob_url, thumbnail_url, file_type, sort_order')
-    .eq('char_id', demo.char_id)
-    .eq('is_deleted', false)
-    .order('sort_order');
-
-  const { data: dna } = await sb
-    .from('character_dna')
-    .select('*')
-    .eq('char_id', demo.char_id)
-    .eq('is_current', true)
-    .maybeSingle();
-
-  return c.json({
-    success: true,
-    data: {
-      ...char,
-      images: images || [],
-      dna: dna || null,
-      prompt_count: demo.prompt_count,
-      prompts_remaining: 3 - demo.prompt_count,
-    },
+  return ok({
+    ...full,
+    prompt_count: demo.prompt_count,
+    prompts_remaining: CONSTANTS.DEMO_MAX_PROMPTS - demo.prompt_count,
   });
 });
 
@@ -51,89 +25,36 @@ demoChar.get('/char', withDemo, async (c) => {
 demoChar.post('/char/upload', withDemo, async (c) => {
   const demo = c.var.demoUser!;
   const charId = demo.char_id;
-  const sb = getSupabaseAdmin();
 
-  const { data: char } = await sb
-    .from('characters')
-    .select('char_id')
-    .eq('char_id', charId)
-    .single();
-
-  if (!char) {
-    return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Demo karakter tidak ditemukan' } }, 404);
-  }
-
+  // Parse form
   const formData = await c.req.formData();
   const files = formData.getAll('files') as File[];
+  if (!files?.length) return E.VALIDATION('Tidak ada file');
 
-  if (!files || files.length === 0) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Tidak ada file' } }, 400);
+  // Check max
+  const existingCount = await CharacterService.countImages(charId);
+  if (existingCount + files.length > CONSTANTS.MAX_IMAGES) {
+    return E.VALIDATION(`Max ${CONSTANTS.MAX_IMAGES} foto. Saat ini ${existingCount} foto.`);
   }
 
-  const { count: existingCount } = await sb
-    .from('character_images')
-    .select('*', { count: 'exact', head: true })
-    .eq('char_id', charId)
-    .eq('is_deleted', false);
+  // Validate batch
+  const { valid, errors } = UploadService.validateBatch(files);
+  if (errors.length > 0) return E.VALIDATION(errors.join('; '));
 
-  const totalAfter = (existingCount || 0) + files.length;
-  if (totalAfter > 20) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Max 20 foto' } }, 400);
+  // Check min 5
+  if (existingCount + valid.length < CONSTANTS.MIN_IMAGES) {
+    return E.VALIDATION(`${CONSTANTS.MIN_IMAGES - (existingCount + valid.length)} foto lagi minimal.`);
   }
 
-  const errors: string[] = [];
-  const uploaded: any[] = [];
+  // Upload batch — reuse same service, different path prefix
+  const result = await UploadService.uploadBatch(valid, charId, null, 'demo', existingCount);
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const validation = await validateImage(file);
-    if (!validation.valid) {
-      errors.push(`File ${i + 1}: ${validation.error}`);
-      continue;
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const ext = file.type.split('/')[1] || 'jpg';
-    const order = (existingCount || 0) + i + 1;
-    const fileName = `demo_${order}_${crypto.randomUUID()}.${ext}`;
-    const filePath = `demo/${charId}/${fileName}`;
-
-    const { error: uploadError } = await sb.storage
-      .from('character-photos')
-      .upload(filePath, buffer, { contentType: file.type, upsert: false });
-
-    if (uploadError) {
-      errors.push(`File ${order}: ${uploadError.message}`);
-      continue;
-    }
-
-    const { data: { publicUrl } } = sb.storage.from('character-photos').getPublicUrl(filePath);
-
-    const { data: record } = await sb
-      .from('character_images')
-      .insert({
-        char_id: charId,
-        blob_url: publicUrl,
-        file_type: ext,
-        file_size: buffer.length,
-        sort_order: order,
-        moderation_status: 'pending',
-      })
-      .select('image_id, blob_url, file_type, sort_order')
-      .single();
-
-    if (record) uploaded.push(record);
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      uploaded,
-      total_images: (existingCount || 0) + uploaded.length,
-      images_remaining: Math.max(0, 5 - ((existingCount || 0) + uploaded.length)),
-      errors: errors.length > 0 ? errors : undefined,
-    },
-  }, 201);
+  return created({
+    uploaded: result.uploaded,
+    total_images: result.totalImages,
+    images_remaining: Math.max(0, CONSTANTS.MIN_IMAGES - result.totalImages),
+    errors: result.errors.length > 0 ? result.errors : undefined,
+  });
 });
 
 // ─── POST /api/demo/char/analyze-dna ───
@@ -141,51 +62,30 @@ demoChar.post('/char/analyze-dna', withDemo, async (c) => {
   const demo = c.var.demoUser!;
 
   // Check prompt limit
-  if (demo.prompt_count >= 3) {
-    return c.json({
-      success: false,
-      error: {
-        code: 'DEMO_LIMIT',
-        message: 'Batas demo tercapai (3 prompt). Daftar akun gratis untuk akses penuh.',
-      },
-    }, 403);
+  if (demo.prompt_count >= CONSTANTS.DEMO_MAX_PROMPTS) {
+    return E.DEMO_LIMIT('Batas demo tercapai (3 prompt). Daftar akun gratis untuk akses penuh.');
   }
 
-  const sb = getSupabaseAdmin();
-  const { count: imgCount } = await sb
-    .from('character_images')
-    .select('*', { count: 'exact', head: true })
-    .eq('char_id', demo.char_id)
-    .eq('is_deleted', false);
-
-  if (!imgCount || imgCount < 5) {
-    return c.json({
-      success: false,
-      error: {
-        code: 'VALIDATION_ERROR',
-        message: `Minimal 5 foto. Saat ini ${imgCount || 0} foto.`,
-      },
-    }, 400);
+  // Check image count
+  const imgCount = await CharacterService.countImages(demo.char_id);
+  if (imgCount < CONSTANTS.MIN_IMAGES) {
+    return E.VALIDATION(`Minimal ${CONSTANTS.MIN_IMAGES} foto. Saat ini ${imgCount} foto.`);
   }
 
+  // Extract DNA (empty userId for demo)
   const result = await extractCharacterDna(demo.char_id, '');
-
-  if (!result.success) {
-    return c.json({ success: false, error: { code: 'EXTRACTION_ERROR', message: result.error } }, 500);
-  }
+  if (!result.success) return E.VALIDATION(result.error!);
 
   // Increment prompt count
+  const sb = getSupabaseAdmin();
   await sb.from('demo_sessions')
     .update({ prompt_count: demo.prompt_count + 1 })
     .eq('session_id', demo.session_id);
 
-  return c.json({
-    success: true,
-    data: {
-      char_id: demo.char_id,
-      dna: result.dna,
-      prompts_remaining: 2 - demo.prompt_count,
-    },
+  return ok({
+    char_id: demo.char_id,
+    dna: result.dna,
+    prompts_remaining: CONSTANTS.DEMO_MAX_PROMPTS - demo.prompt_count - 1,
   });
 });
 

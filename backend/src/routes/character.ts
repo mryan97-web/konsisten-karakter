@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
-import { getSupabase, getSupabaseAdmin } from '../lib/supabase';
 import { withAuth } from '../middleware/auth';
+import { CharacterService } from '../services/character-service';
+import { E } from '../shared/response';
+import { ok, created } from '../shared/response';
+import { validateCharacterName, validateGender } from '../shared/validators';
+import { CreateCharacterRequest, UpdateCharacterRequest } from '../shared/types';
+import { getSupabaseAdmin } from '../lib/supabase';
 
 const character = new Hono();
 
@@ -8,89 +13,48 @@ const character = new Hono();
 character.post('/', withAuth, async (c) => {
   const userId = c.var.userId;
   const user = c.var.user;
-  const { name, gender, description, height_cm, weight_kg, notes } = await c.req.json();
+  const body: CreateCharacterRequest = await c.req.json();
 
-  // Validation
-  if (!name || name.trim().length === 0) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama karakter wajib diisi' } }, 400);
-  }
-  if (name.length > 100) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama karakter maksimal 100 karakter' } }, 400);
-  }
-  if (gender && !['Laki-laki', 'Perempuan'].includes(gender)) {
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Gender harus Laki-laki atau Perempuan' } }, 400);
-  }
+  // Validate
+  const nameErr = validateCharacterName(body.name);
+  if (nameErr) return E.VALIDATION(nameErr);
+  const genderErr = validateGender(body.gender);
+  if (genderErr) return E.VALIDATION(genderErr);
 
-  // Tier check: Free = max 1 character
+  // Tier check
+  const limit = await CharacterService.checkFreeTierLimit(userId, user.tier);
+  if (limit.blocked) return E.TIER_LIMIT(limit.message!, 'pro');
+
   const sb = getSupabaseAdmin();
-  if (user.tier === 'free') {
-    const { count } = await sb
-      .from('characters')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
-    if (count && count >= 1) {
-      return c.json({
-        success: false,
-        error: {
-          code: 'TIER_LIMIT',
-          message: 'Free tier hanya bisa membuat 1 karakter. Upgrade ke Pro untuk karakter tak terbatas.',
-          details: { current_tier: 'free', required_tier: 'pro' },
-        },
-      }, 403);
-    }
-  }
-
-  // Create character
-  const { data: char, error } = await sb
+  const { data: char } = await sb
     .from('characters')
     .insert({
       user_id: userId,
-      name: name.trim(),
-      gender: gender || null,
-      description: description || null,
+      name: body.name.trim(),
+      gender: body.gender || null,
+      description: body.description || null,
       type: 'custom',
       share_mode: 'private',
     })
     .select('char_id, name, gender, type, share_mode, is_locked, created_at')
     .single();
 
-  if (error) {
-    console.error('Create character error:', error);
-    return c.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal membuat karakter' } }, 500);
-  }
+  if (!char) return E.INTERNAL('Gagal membuat karakter');
 
-  return c.json({
-    success: true,
-    data: char,
-    meta: {
-      next_step: 'Upload foto',
-      upload_url: `/api/character/${char.char_id}/upload`,
-    },
-  }, 201);
+  return created(char, { next_step: 'Upload foto', upload_url: `/api/character/${char.char_id}/upload` });
 });
 
 // ─── GET /api/character ───
 character.get('/', withAuth, async (c) => {
   const userId = c.var.userId;
-
-  const sb = getSupabase();
-  const { data: characters, error } = await sb
+  const sb = getSupabaseAdmin();
+  const { data: characters } = await sb
     .from('characters')
     .select('char_id, name, gender, type, share_mode, is_locked, prompt_count, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('List characters error:', error);
-    return c.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal memuat karakter' } }, 500);
-  }
-
-  return c.json({
-    success: true,
-    data: characters || [],
-    meta: { total: characters?.length || 0 },
-  });
+  return ok(characters || [], { total: characters?.length || 0 });
 });
 
 // ─── GET /api/character/:id ───
@@ -98,99 +62,55 @@ character.get('/:id', withAuth, async (c) => {
   const userId = c.var.userId;
   const charId = c.req.param('id');
 
-  const sb = getSupabase();
-  const { data: char, error } = await sb
-    .from('characters')
-    .select(`
-      char_id, name, gender, type, description, share_mode, share_code,
-      is_locked, locked_at, prompt_count, created_at, updated_at
-    `)
-    .eq('char_id', charId)
-    .eq('user_id', userId)
-    .single();
+  const ownership = await CharacterService.verifyOwnership(charId, userId);
+  if (!ownership) return E.NOT_FOUND('Karakter tidak ditemukan');
 
-  if (error || !char) {
-    return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Karakter tidak ditemukan' } }, 404);
-  }
-
-  // Load DNA if exists
-  const { data: dna } = await sb
-    .from('character_dna')
-    .select('*')
-    .eq('char_id', charId)
-    .eq('is_current', true)
-    .maybeSingle();
-
-  // Load images (non-deleted)
-  const { data: images } = await sb
-    .from('character_images')
-    .select('image_id, blob_url, thumbnail_url, file_type, sort_order')
-    .eq('char_id', charId)
-    .eq('is_deleted', false)
-    .order('sort_order');
-
-  return c.json({
-    success: true,
-    data: {
-      ...char,
-      dna: dna || null,
-      images: images || [],
-    },
-  });
+  const full = await CharacterService.getFullCharacter(charId);
+  return ok(full);
 });
 
 // ─── PUT /api/character/:id ───
 character.put('/:id', withAuth, async (c) => {
   const userId = c.var.userId;
   const charId = c.req.param('id');
-  const { name, gender, description } = await c.req.json();
+  const body: UpdateCharacterRequest = await c.req.json();
 
-  // Validate ownership
+  const ownership = await CharacterService.verifyOwnership(charId, userId);
+  if (!ownership) return E.NOT_FOUND('Karakter tidak ditemukan');
+
+  // Check lock
   const sb = getSupabaseAdmin();
   const { data: existing } = await sb
     .from('characters')
-    .select('char_id, is_locked')
+    .select('is_locked')
     .eq('char_id', charId)
     .eq('user_id', userId)
     .single();
 
-  if (!existing) {
-    return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Karakter tidak ditemukan' } }, 404);
+  if (existing?.is_locked && (body.name !== undefined || body.gender !== undefined)) {
+    return E.FORBIDDEN('Karakter sudah di-lock. Nama dan gender tidak bisa diubah.');
   }
 
-  // Cannot edit locked character name/gender (identity field)
-  if (existing.is_locked && (name !== undefined || gender !== undefined)) {
-    return c.json({
-      success: false,
-      error: {
-        code: 'FORBIDDEN',
-        message: 'Karakter sudah di-lock. Nama dan gender tidak bisa diubah. Upgrade deskripsi masih bisa.',
-      },
-    }, 403);
+  // Validate
+  if (body.name !== undefined) {
+    const nameErr = validateCharacterName(body.name);
+    if (nameErr) return E.VALIDATION(nameErr);
+  }
+  if (body.gender !== undefined) {
+    const genderErr = validateGender(body.gender);
+    if (genderErr) return E.VALIDATION(genderErr);
   }
 
-  // Build update payload
-  const updates: Record<string, any> = {};
-  if (name !== undefined) {
-    if (!name.trim()) return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Nama tidak boleh kosong' } }, 400);
-    updates.name = name.trim();
-  }
-  if (gender !== undefined) {
-    if (!['Laki-laki', 'Perempuan'].includes(gender)) {
-      return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Gender harus Laki-laki atau Perempuan' } }, 400);
-    }
-    updates.gender = gender;
-  }
-  if (description !== undefined) {
-    updates.description = description;
-  }
-  updates.updated_at = new Date().toISOString();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.name !== undefined) updates.name = body.name.trim();
+  if (body.gender !== undefined) updates.gender = body.gender;
+  if (body.description !== undefined) updates.description = body.description;
 
-  if (Object.keys(updates).length <= 1) { // only updated_at
-    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Tidak ada field yang diupdate' } }, 400);
+  if (Object.keys(updates).length <= 1) {
+    return E.VALIDATION('Tidak ada field yang diupdate');
   }
 
-  const { data: updated, error } = await sb
+  const { data: updated } = await sb
     .from('characters')
     .update(updates)
     .eq('char_id', charId)
@@ -198,12 +118,8 @@ character.put('/:id', withAuth, async (c) => {
     .select('char_id, name, gender, description, is_locked, updated_at')
     .single();
 
-  if (error) {
-    console.error('Update character error:', error);
-    return c.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal mengupdate karakter' } }, 500);
-  }
-
-  return c.json({ success: true, data: updated });
+  if (!updated) return E.INTERNAL('Gagal mengupdate karakter');
+  return ok(updated);
 });
 
 // ─── DELETE /api/character/:id ───
@@ -211,38 +127,13 @@ character.delete('/:id', withAuth, async (c) => {
   const userId = c.var.userId;
   const charId = c.req.param('id');
 
-  // Check ownership + get image URLs for cleanup
+  const ownership = await CharacterService.verifyOwnership(charId, userId);
+  if (!ownership) return E.NOT_FOUND('Karakter tidak ditemukan');
+
   const sb = getSupabaseAdmin();
-  const { data: existing } = await sb
-    .from('characters')
-    .select('char_id, name')
-    .eq('char_id', charId)
-    .eq('user_id', userId)
-    .single();
+  await sb.from('characters').delete().eq('char_id', charId).eq('user_id', userId);
 
-  if (!existing) {
-    return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Karakter tidak ditemukan' } }, 404);
-  }
-
-  // Cascade delete — images, dna, shares akan kehapus otomatis via FK CASCADE
-  const { error } = await sb
-    .from('characters')
-    .delete()
-    .eq('char_id', charId)
-    .eq('user_id', userId);
-
-  if (error) {
-    console.error('Delete character error:', error);
-    return c.json({ success: false, error: { code: 'INTERNAL_ERROR', message: 'Gagal menghapus karakter' } }, 500);
-  }
-
-  return c.json({
-    success: true,
-    data: {
-      message: `Karakter "${existing.name}" berhasil dihapus`,
-      char_id: charId,
-    },
-  });
+  return ok({ message: `Karakter "${ownership.name}" berhasil dihapus`, char_id: charId });
 });
 
 export default character;
