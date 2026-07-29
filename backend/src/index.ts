@@ -25,6 +25,12 @@ app.get('/api/health', (c) => {
 const { default: authRoutes } = await import('./routes/auth.js');
 app.route('/api/auth', authRoutes);
 
+const { default: characterRoutes } = await import('./routes/character.js');
+app.route('/api/character', characterRoutes);
+
+const { default: uploadRoutes } = await import('./routes/upload.js');
+app.route('/api', uploadRoutes);
+
 // ─── 404 ───
 app.notFound((c) => {
   return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint tidak ditemukan' } }, 404);

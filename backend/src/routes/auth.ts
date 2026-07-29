@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { supabase, supabaseAdmin } from '../lib/supabase.js';
+import { getSupabase, getSupabaseAdmin } from '../lib/supabase';
 import { withAuth } from '../middleware/auth.js';
 
 const auth = new Hono();
@@ -19,8 +19,10 @@ auth.post('/register', async (c) => {
     return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Setujui syarat dan ketentuan' } }, 400);
   }
 
+  const sbAdmin = getSupabaseAdmin();
+
   // Sign up via Supabase Auth
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  const { data: authData, error: authError } = await sbAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
@@ -35,7 +37,8 @@ auth.post('/register', async (c) => {
   }
 
   // Insert into public.users
-  const { data: user, error: dbError } = await supabase
+  const sb = getSupabase();
+  const { data: user } = await sb
     .from('users')
     .insert({
       user_id: authData.user.id,
@@ -47,10 +50,6 @@ auth.post('/register', async (c) => {
     })
     .select('user_id, email, display_name, tier, created_at')
     .single();
-
-  if (dbError) {
-    console.error('DB insert error:', dbError);
-  }
 
   return c.json({
     success: true,
@@ -67,7 +66,8 @@ auth.post('/login', async (c) => {
     return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email dan password wajib diisi' } }, 400);
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const sb = getSupabase();
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
 
   if (error) {
     if (error.message.includes('Invalid')) {
@@ -77,7 +77,7 @@ auth.post('/login', async (c) => {
   }
 
   // Get user profile from public.users
-  const { data: user } = await supabase
+  const { data: user } = await sb
     .from('users')
     .select('user_id, email, display_name, avatar_url, tier, status')
     .eq('user_id', data.user.id)
@@ -107,7 +107,8 @@ auth.post('/google', async (c) => {
     return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'ID token Google wajib diisi' } }, 400);
   }
 
-  const { data, error } = await supabase.auth.signInWithIdToken({
+  const sb = getSupabase();
+  const { data, error } = await sb.auth.signInWithIdToken({
     provider: 'google',
     token: id_token,
   });
@@ -118,7 +119,7 @@ auth.post('/google', async (c) => {
 
   // Upsert into public.users
   const email = data.user?.email || '';
-  const { data: user } = await supabase
+  const { data: user } = await sb
     .from('users')
     .upsert({
       user_id: data.user.id,
@@ -147,31 +148,86 @@ auth.post('/google', async (c) => {
 // ─── GET /api/auth/me ───
 auth.get('/me', withAuth, async (c) => {
   const userId = c.var.userId;
+  const userData = c.var.user;
 
-  const { data: user, error } = await supabase
-    .from('users')
-    .select(`
-      user_id, email, display_name, avatar_url, tier, status, created_at,
-      subscriptions!inner(plan, status, expires_at, grace_until)
-    `)
+  // Load subscription separately
+  const sb = getSupabase();
+  const { data: sub } = await sb
+    .from('subscriptions')
+    .select('plan, status, expires_at, grace_until')
     .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
-  if (error || !user) {
-    // Fallback: return from JWT
-    return c.json({
-      success: true,
-      data: {
-        user_id: userId,
-        email: c.var.user.email,
-        display_name: c.var.user.email.split('@')[0],
-        tier: c.var.user.tier,
-        status: 'active',
-      },
-    });
+  return c.json({
+    success: true,
+    data: {
+      user_id: userId,
+      email: userData.email,
+      display_name: userData.email.split('@')[0],
+      tier: userData.tier,
+      status: userData.status,
+      subscription: sub || null,
+    },
+  });
+});
+
+// ─── POST /api/auth/forgot-password ───
+auth.post('/forgot-password', async (c) => {
+  const { email } = await c.req.json();
+
+  if (!email) {
+    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Email wajib diisi' } }, 400);
   }
 
-  return c.json({ success: true, data: user });
+  await getSupabaseAdmin().auth.admin.generateLink({
+    type: 'recovery',
+    email,
+  });
+
+  // Always return success — anti-enumeration
+  return c.json({
+    success: true,
+    data: { message: 'Jika email terdaftar, link reset password telah dikirim' },
+  });
+});
+
+// ─── POST /api/auth/reset-password ───
+auth.post('/reset-password', async (c) => {
+  const authHeader = c.req.header('Authorization') || '';
+  const token = authHeader.slice(7);
+
+  if (!token) {
+    return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token reset wajib diisi' } }, 401);
+  }
+
+  const { password } = await c.req.json();
+
+  if (!password || password.length < 6) {
+    return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Password minimal 6 karakter' } }, 400);
+  }
+
+  const sb = getSupabase();
+  const { data: { user }, error: userError } = await sb.auth.getUser(token);
+
+  if (userError || !user) {
+    return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Token tidak valid atau expired' } }, 401);
+  }
+
+  const { error: updateError } = await getSupabaseAdmin().auth.admin.updateUserById(user.id, {
+    password,
+  });
+
+  if (updateError) {
+    return c.json({ success: false, error: { code: 'AUTH_ERROR', message: updateError.message } }, 500);
+  }
+
+  return c.json({
+    success: true,
+    data: { message: 'Password berhasil direset' },
+  });
 });
 
 // ─── POST /api/auth/refresh ───
@@ -182,7 +238,7 @@ auth.post('/refresh', async (c) => {
     return c.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Refresh token wajib diisi' } }, 400);
   }
 
-  const { data, error } = await supabase.auth.refreshSession({ refresh_token });
+  const { data, error } = await getSupabase().auth.refreshSession({ refresh_token });
 
   if (error) {
     return c.json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Refresh token tidak valid' } }, 401);
@@ -200,11 +256,7 @@ auth.post('/refresh', async (c) => {
 
 // ─── POST /api/auth/logout ───
 auth.post('/logout', withAuth, async (c) => {
-  const authHeader = c.req.header('Authorization') || '';
-  const token = authHeader.slice(7);
-
-  await supabaseAdmin.auth.admin.signOut(c.var.userId);
-
+  await getSupabaseAdmin().auth.admin.signOut(c.var.userId);
   return c.json({ success: true, data: { message: 'Logout berhasil' } });
 });
 

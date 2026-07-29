@@ -3,50 +3,71 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import CreateCharacterForm from '@/components/CreateCharacterForm';
+import UploadPhotoModal from '@/components/UploadPhotoModal';
 
-type User = {
+type UserData = {
   user_id: string;
   email: string;
   display_name: string;
   tier: string;
+  status: string;
+  subscription: any;
+};
+
+type Character = {
+  char_id: string;
+  name: string;
+  gender: string | null;
+  type: string;
+  share_mode: string;
+  is_locked: boolean;
+  prompt_count: number;
+  created_at: string;
 };
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [uploadChar, setUploadChar] = useState<{ char_id: string; name: string } | null>(null);
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+  const loadData = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.push('/');
+      return;
+    }
 
-      if (!session) {
-        router.push('/');
-        return;
-      }
+    const headers = { Authorization: `Bearer ${session.access_token}` };
 
-      // Fetch user profile from backend
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const data = await res.json();
-        if (data.success) {
-          setUser(data.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch user:', err);
-      }
+    // Load user + characters in parallel
+    const [userRes, charRes] = await Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/auth/me`, { headers }),
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character`, { headers }),
+    ]);
 
-      setLoading(false);
-    };
+    const userData = await userRes.json();
+    const charData = await charRes.json();
 
-    checkAuth();
-  }, [router]);
+    if (userData.success) setUser(userData.data);
+    if (charData.success) setCharacters(charData.data);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/');
+  };
+
+  const handleCreated = (char: Character) => {
+    setCharacters((prev) => [char, ...prev]);
+    setShowCreate(false);
+    setUploadChar({ char_id: char.char_id, name: char.name });
   };
 
   if (loading) {
@@ -77,42 +98,92 @@ export default function DashboardPage() {
 
       {/* ─── Main ─── */}
       <main className="mx-auto max-w-6xl px-6 py-12">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="mt-1 text-[var(--muted)]">Kelola karakter AI dan prompt kamu</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <p className="mt-1 text-[var(--muted)]">Kelola karakter AI dan prompt kamu</p>
+          </div>
+          <button onClick={() => setShowCreate(true)} className="btn btn-primary px-5 py-2.5">
+            + Buat Karakter
+          </button>
         </div>
 
         {/* ─── Stats ─── */}
         <div className="mb-12 grid gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">{characters.length}</div>
             <div className="mt-1 text-sm text-[var(--muted)]">Karakter</div>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">0</div>
-            <div className="mt-1 text-sm text-[var(--muted)]">Prompt Bulan Ini</div>
+            <div className="text-3xl font-bold">
+              {characters.reduce((sum, c) => sum + c.prompt_count, 0)}
+            </div>
+            <div className="mt-1 text-sm text-[var(--muted)]">Total Prompt</div>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
-            <div className="text-3xl font-bold">30</div>
+            <div className="text-3xl font-bold">
+              {user?.tier === 'free' ? `${Math.max(0, 30 - characters.reduce((s, c) => s + c.prompt_count, 0))}` : '∞'}
+            </div>
             <div className="mt-1 text-sm text-[var(--muted)]">Sisa Prompt</div>
           </div>
         </div>
 
-        {/* ─── Empty State ─── */}
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] py-24">
-          <div className="mb-4 text-6xl">🎭</div>
-          <h2 className="mb-2 text-xl font-semibold">Belum Ada Karakter</h2>
-          <p className="mb-6 max-w-md text-center text-[var(--muted)]">
-            Buat karakter AI pertamamu. Upload 5-20 foto, AI akan mengekstrak DNA karakter dan siap digunakan untuk generate prompt.
-          </p>
-          <button
-            onClick={() => router.push('/character/create')}
-            className="btn btn-primary px-6 py-3"
-          >
-            + Buat Karakter
-          </button>
-        </div>
+        {/* ─── Character Grid or Empty State ─── */}
+        {characters.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] py-24">
+            <div className="mb-4 text-6xl">🎭</div>
+            <h2 className="mb-2 text-xl font-semibold">Belum Ada Karakter</h2>
+            <p className="mb-6 max-w-md text-center text-[var(--muted)]">
+              Buat karakter AI pertamamu. Upload 5-20 foto, AI akan mengekstrak DNA karakter dan siap digunakan untuk generate prompt.
+            </p>
+            <button onClick={() => setShowCreate(true)} className="btn btn-primary px-6 py-3">
+              + Buat Karakter
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {characters.map((char) => (
+              <div
+                key={char.char_id}
+                className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 hover:border-[var(--muted)] transition-colors cursor-pointer"
+                onClick={() => router.push(`/character/${char.char_id}`)}
+              >
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--primary)]/10 text-xl">
+                    {char.gender === 'Perempuan' ? '👩' : char.gender === 'Laki-laki' ? '👨' : '🎭'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate">{char.name}</div>
+                    <div className="text-xs text-[var(--muted)]">
+                      {char.gender || 'No gender'} · {char.is_locked ? '🔒 Locked' : '📝 Draft'}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
+                  <span>{char.prompt_count} prompt</span>
+                  {char.type === 'default' && <span className="rounded bg-[var(--muted-bg)] px-2 py-0.5">Default</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </main>
+
+      {showCreate && (
+        <CreateCharacterForm
+          onClose={() => setShowCreate(false)}
+          onCreated={handleCreated}
+        />
+      )}
+
+      {uploadChar && (
+        <UploadPhotoModal
+          charId={uploadChar.char_id}
+          charName={uploadChar.name}
+          onClose={() => setUploadChar(null)}
+          onComplete={() => setUploadChar(null)}
+        />
+      )}
     </div>
   );
 }
