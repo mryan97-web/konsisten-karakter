@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import ClientLayout from './ClientLayout';
 
 export const metadata: Metadata = {
   title: 'ConsistentChar — Karakter AI Konsisten untuk Semua Platform',
@@ -19,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className="dark">
-      <body>{children}</body>
+      <body><ClientLayout>{children}</ClientLayout></body>
     </html>
   );
 }

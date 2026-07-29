@@ -36,9 +36,9 @@ export default function LandingPage() {
             <button onClick={() => setAuthOpen(true)} className="btn btn-primary px-8 py-3 text-base">
               Mulai Gratis
             </button>
-            <button onClick={() => setAuthOpen(true)} className="btn btn-secondary px-8 py-3 text-base">
-              Lihat Demo
-            </button>
+            <a href="/demo" className="btn btn-secondary px-8 py-3 text-base inline-flex items-center justify-center">
+              🧪 Coba Demo
+            </a>
           </div>
           <p className="mt-4 text-sm text-[var(--muted)]">Gratis selamanya — 1 karakter, 30 prompt/bulan</p>
         </div>

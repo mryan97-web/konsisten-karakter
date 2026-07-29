@@ -28,6 +28,12 @@ app.get('/api/health', (c) => {
 });
 
 // ─── Routes ───
+const { default: demoRoutes } = await import('./routes/demo.js');
+app.route('/api/demo', demoRoutes);
+
+const { default: demoCharRoutes } = await import('./routes/demo-char.js');
+app.route('/api/demo', demoCharRoutes);
+
 const { default: authRoutes } = await import('./routes/auth.js');
 app.route('/api/auth', authRoutes);
 
