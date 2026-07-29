@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import CreateCharacterForm from '@/components/CreateCharacterForm';
 import UploadPhotoModal from '@/components/UploadPhotoModal';
+import DnaAnalysisModal from '@/components/DnaAnalysisModal';
 
 type UserData = {
   user_id: string;
@@ -33,6 +34,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [uploadChar, setUploadChar] = useState<{ char_id: string; name: string } | null>(null);
+  const [analyzeChar, setAnalyzeChar] = useState<{ char_id: string; name: string; imageCount: number } | null>(null);
 
   const loadData = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -43,7 +45,6 @@ export default function DashboardPage() {
 
     const headers = { Authorization: `Bearer ${session.access_token}` };
 
-    // Load user + characters in parallel
     const [userRes, charRes] = await Promise.all([
       fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/auth/me`, { headers }),
       fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character`, { headers }),
@@ -162,6 +163,17 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
                   <span>{char.prompt_count} prompt</span>
                   {char.type === 'default' && <span className="rounded bg-[var(--muted-bg)] px-2 py-0.5">Default</span>}
+                  {char.type === 'custom' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAnalyzeChar({ char_id: char.char_id, name: char.name, imageCount: 0 });
+                      }}
+                      className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--primary)] hover:bg-[var(--primary)]/20 transition-colors"
+                    >
+                      🧬 Analisis DNA
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -182,6 +194,16 @@ export default function DashboardPage() {
           charName={uploadChar.name}
           onClose={() => setUploadChar(null)}
           onComplete={() => setUploadChar(null)}
+        />
+      )}
+
+      {analyzeChar && (
+        <DnaAnalysisModal
+          charId={analyzeChar.char_id}
+          charName={analyzeChar.name}
+          imageCount={analyzeChar.imageCount}
+          onClose={() => setAnalyzeChar(null)}
+          onComplete={() => setAnalyzeChar(null)}
         />
       )}
     </div>

@@ -31,6 +31,9 @@ app.route('/api/character', characterRoutes);
 const { default: uploadRoutes } = await import('./routes/upload.js');
 app.route('/api', uploadRoutes);
 
+const { default: analyzeRoutes } = await import('./routes/analyze.js');
+app.route('/api', analyzeRoutes);
+
 // ─── 404 ───
 app.notFound((c) => {
   return c.json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint tidak ditemukan' } }, 404);
