@@ -7,6 +7,27 @@ import UploadPhotoModal from '@/components/UploadPhotoModal';
 import DnaAnalysisModal from '@/components/DnaAnalysisModal';
 import EditCharacterModal from '@/components/EditCharacterModal';
 
+type CharacterImage = {
+  image_id: string;
+  blob_url: string;
+  thumbnail_url: string | null;
+  file_type: string;
+  sort_order: number;
+};
+
+type CharacterDna = {
+  dna_id: string;
+  version: number;
+  is_current: boolean;
+  base: Record<string, string>;
+  face: Record<string, unknown>;
+  hair: Record<string, unknown>;
+  body: Record<string, unknown>;
+  style: Record<string, unknown>;
+  expression: Record<string, unknown>;
+  created_at: string;
+};
+
 type CharacterDetail = {
   char_id: string;
   name: string;
@@ -19,15 +40,30 @@ type CharacterDetail = {
   prompt_count: number;
   created_at: string;
   updated_at: string;
-  dna: any;
-  images: {
-    image_id: string;
-    blob_url: string;
-    thumbnail_url: string | null;
-    file_type: string;
-    sort_order: number;
-  }[];
+  dna: CharacterDna | null;
+  images: CharacterImage[];
 };
+
+type DnaSectionProps = {
+  title: string;
+  data: Record<string, unknown>;
+};
+
+function DnaSection({ title, data }: DnaSectionProps) {
+  return (
+    <div>
+      <h4 className="text-xs font-medium text-[var(--primary)] uppercase tracking-wider mb-2">{title}</h4>
+      <div className="space-y-1 text-sm">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} className="flex gap-2">
+            <span className="text-[var(--muted)] min-w-[100px]">{k.replace(/_/g, ' ')}:</span>
+            <span>{typeof v === 'object' ? JSON.stringify(v) : String(v ?? '-')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function CharacterDetailClient({
   charId,
@@ -95,7 +131,8 @@ export default function CharacterDetailClient({
   }
 
   const imageCount = char.images?.length || 0;
-  const hasDna = char.dna !== null && char.dna !== undefined;
+  const dna = char.dna;
+  const hasDna = dna !== null && dna !== undefined;
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
@@ -110,7 +147,6 @@ export default function CharacterDetailClient({
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
-        {/* ─── Hero ─── */}
         <div className="mb-8 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-5">
@@ -140,7 +176,6 @@ export default function CharacterDetailClient({
           </div>
         </div>
 
-        {/* ─── Action Grid ─── */}
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <button onClick={() => setShowUpload(true)}
             className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 hover:border-[var(--primary)] transition-all group">
@@ -159,7 +194,7 @@ export default function CharacterDetailClient({
             <div className="mb-2 text-3xl group-hover:scale-110">🧬</div>
             <div className="font-semibold text-sm">{hasDna ? 'Analisis Ulang DNA' : 'Analisis DNA'}</div>
             <div className="text-xs text-[var(--muted)]">
-              {hasDna ? `v${char.dna.version}` : imageCount >= 5 ? 'Siap dianalisis' : 'Upload 5+ foto dulu'}
+              {hasDna ? `v${char.dna!.version}` : imageCount >= 5 ? 'Siap dianalisis' : 'Upload 5+ foto dulu'}
             </div>
           </button>
 
@@ -171,7 +206,6 @@ export default function CharacterDetailClient({
           </button>
         </div>
 
-        {/* ─── Photo Gallery ─── */}
         {char.images && char.images.length > 0 && (
           <div className="mb-8">
             <h2 className="mb-4 text-lg font-semibold">Foto Karakter</h2>
@@ -199,15 +233,14 @@ export default function CharacterDetailClient({
           </div>
         )}
 
-        {/* ─── DNA Result ─── */}
         {hasDna && (
           <div className="mb-8">
-            <h2 className="mb-4 text-lg font-semibold">🧬 DNA Karakter (v{char.dna.version})</h2>
+            <h2 className="mb-4 text-lg font-semibold">🧬 DNA Karakter (v{dna!.version})</h2>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {char.dna.base && <DnaSection title="Base" data={char.dna.base} />}
-                {char.dna.face && <DnaSection title="Wajah" data={char.dna.face} />}
-                {char.dna.hair && <DnaSection title="Rambut" data={char.dna.hair} />}
+                {dna!.base && <DnaSection title="Base" data={dna!.base as Record<string, unknown>} />}
+                {dna!.face && <DnaSection title="Wajah" data={dna!.face} />}
+                {dna!.hair && <DnaSection title="Rambut" data={dna!.hair} />}
               </div>
               <button onClick={() => setShowDna(true)} className="mt-4 text-sm text-[var(--primary)] hover:underline">
                 🔄 Analisis ulang
@@ -222,7 +255,6 @@ export default function CharacterDetailClient({
         </div>
       </main>
 
-      {/* ─── Modals ─── */}
       {showEdit && (
         <EditCharacterModal
           charId={char.char_id} charName={char.name} charGender={char.gender}
@@ -244,7 +276,6 @@ export default function CharacterDetailClient({
         />
       )}
 
-      {/* ─── Delete Confirm ─── */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border border-red-500/30 bg-[var(--card)] p-8 shadow-2xl">
@@ -263,22 +294,6 @@ export default function CharacterDetailClient({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function DnaSection({ title, data }: { title: string; data: Record<string, any> }) {
-  return (
-    <div>
-      <h4 className="text-xs font-medium text-[var(--primary)] uppercase tracking-wider mb-2">{title}</h4>
-      <div className="space-y-1 text-sm">
-        {Object.entries(data).map(([k, v]) => (
-          <div key={k} className="flex gap-2">
-            <span className="text-[var(--muted)] min-w-[100px]">{k.replace(/_/g, ' ')}:</span>
-            <span>{typeof v === 'object' ? JSON.stringify(v) : String(v || '-')}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

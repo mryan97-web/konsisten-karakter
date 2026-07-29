@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory';
+import { E } from '../shared/response';
 
 const requestCounts = new Map<string, { count: number; resetAt: number }>();
 
@@ -12,18 +13,7 @@ export const withRateLimit = (limit: number, windowMs: number = 60_000) =>
       requestCounts.set(key, { count: 1, resetAt: now + windowMs });
     } else if (entry.count >= limit) {
       const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-      c.header('Retry-After', String(retryAfter));
-      return c.json(
-        {
-          success: false,
-          error: {
-            code: 'RATE_LIMIT',
-            message: `Terlalu banyak request. Coba lagi dalam ${retryAfter} detik`,
-            details: { retry_after: retryAfter, limit },
-          },
-        },
-        429,
-      );
+      return E.RATE_LIMIT(retryAfter, limit);
     } else {
       entry.count++;
     }

@@ -3,9 +3,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+type CreatedChar = {
+  char_id: string;
+  name: string;
+  gender: string | null;
+  type: string;
+  share_mode: string;
+  is_locked: boolean;
+  prompt_count: number;
+  created_at: string;
+};
+
 type CreateCharacterProps = {
   onClose: () => void;
-  onCreated: (char: any) => void;
+  onCreated: (char: CreatedChar) => void;
 };
 
 export default function CreateCharacterForm({ onClose, onCreated }: CreateCharacterProps) {

@@ -12,10 +12,23 @@ type DnaAnalysisModalProps = {
   onComplete: () => void;
 };
 
+type DnaField = Record<string, unknown>;
+
+type DnaResult = {
+  dna: {
+    base: DnaField;
+    face: DnaField;
+    hair: DnaField;
+    body: DnaField;
+    style: DnaField;
+    expression: DnaField;
+  };
+};
+
 export default function DnaAnalysisModal({ charId, charName, imageCount, onClose, onComplete }: DnaAnalysisModalProps) {
   const router = useRouter();
   const [analyzing, setAnalyzing] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<DnaResult | null>(null);
   const [error, setError] = useState('');
   const [step, setStep] = useState<'confirm' | 'analyzing' | 'result' | 'error'>('confirm');
 
@@ -62,31 +75,6 @@ export default function DnaAnalysisModal({ charId, charName, imageCount, onClose
     } finally {
       setAnalyzing(false);
     }
-  };
-
-  const renderDnaField = (label: string, value: any) => {
-    if (!value) return null;
-    if (typeof value === 'object') {
-      return (
-        <div className="mb-3">
-          <h4 className="text-sm font-medium text-[var(--primary)] mb-1">{label}</h4>
-          <div className="rounded-lg bg-[var(--muted-bg)] p-3">
-            {Object.entries(value).map(([k, v]) => (
-              <div key={k} className="flex gap-2 text-sm mb-0.5">
-                <span className="text-[var(--muted)] min-w-[100px]">{k.replace(/_/g, ' ')}:</span>
-                <span className="text-[var(--foreground)]">{String(v || '-')}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="flex gap-2 text-sm mb-0.5">
-        <span className="text-[var(--muted)] min-w-[120px]">{label}:</span>
-        <span className="text-[var(--foreground)]">{String(value)}</span>
-      </div>
-    );
   };
 
   return (
@@ -176,12 +164,12 @@ export default function DnaAnalysisModal({ charId, charName, imageCount, onClose
             </div>
 
             <div className="space-y-1">
-              {result.dna?.base && renderDnaField('Base', result.dna.base)}
-              {result.dna?.face && renderDnaField('Wajah', result.dna.face)}
-              {result.dna?.hair && renderDnaField('Rambut', result.dna.hair)}
-              {result.dna?.body && renderDnaField('Tubuh', result.dna.body)}
-              {result.dna?.style && renderDnaField('Gaya & Fashion', result.dna.style)}
-              {result.dna?.expression && renderDnaField('Ekspresi', result.dna.expression)}
+              {renderSection('Base', result.dna.base)}
+              {renderSection('Wajah', result.dna.face)}
+              {renderSection('Rambut', result.dna.hair)}
+              {renderSection('Tubuh', result.dna.body)}
+              {renderSection('Gaya & Fashion', result.dna.style)}
+              {renderSection('Ekspresi', result.dna.expression)}
             </div>
 
             <div className="mt-6">
@@ -211,6 +199,23 @@ export default function DnaAnalysisModal({ charId, charName, imageCount, onClose
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function renderSection(title: string, data: DnaField): React.ReactNode {
+  if (!data || Object.keys(data).length === 0) return null;
+  return (
+    <div className="mb-3">
+      <h4 className="text-sm font-medium text-[var(--primary)] mb-1">{title}</h4>
+      <div className="rounded-lg bg-[var(--muted-bg)] p-3">
+        {Object.entries(data).map(([k, v]) => (
+          <div key={k} className="flex gap-2 text-sm mb-0.5">
+            <span className="text-[var(--muted)] min-w-[100px]">{k.replace(/_/g, ' ')}:</span>
+            <span className="text-[var(--foreground)]">{String(v ?? '-')}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ export default function EditCharacterModal({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const payload: Record<string, any> = { name: name.trim() };
+      const payload: Record<string, string | null> = { name: name.trim() };
       if (!isLocked) payload.gender = gender || null;
       payload.description = description || null;
 

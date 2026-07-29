@@ -1,21 +1,13 @@
 import { getSupabaseAdmin } from '../lib/supabase';
+import { DnaExtractionResult } from '../shared/types';
+import { CONSTANTS } from '../shared/constants';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
 
-export type DnaExtractionResult = {
-  success: boolean;
-  dna?: {
-    base: Record<string, any>;
-    face: Record<string, any>;
-    hair: Record<string, any>;
-    body: Record<string, any>;
-    style: Record<string, any>;
-    expression: Record<string, any>;
-    raw_ai_output: string;
-  };
-  error?: string;
-};
+type GeminiPart = { text?: string; inlineData?: { mimeType: string; data: string } };
+type GeminiContent = { parts: GeminiPart[] };
+type GeminiCandidate = { content: GeminiContent };
+type GeminiResponse = { candidates?: GeminiCandidate[] };
 
 /**
  * Analyze character images using Gemini Vision and extract Character DNA
@@ -171,7 +163,7 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
       return { success: false, error: 'GEMINI_API_KEY tidak dikonfigurasi' };
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${CONSTANTS.DNA_GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
     const payload = {
       contents: [
@@ -255,7 +247,7 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
       await sb.from('ai_usage').insert({
         user_id: userId,
         job_type: 'dna_extraction',
-        model: GEMINI_MODEL,
+        model: CONSTANTS.DNA_GEMINI_MODEL,
         images_analyzed: imageParts.length,
         duration_ms: durationMs,
         estimated_cost_usd: 0,
@@ -320,7 +312,7 @@ Berikan estimasi akurat berdasarkan foto yang diberikan. Jika ada detail yang ti
     await sb.from('ai_usage').insert({
       user_id: userId,
       job_type: 'dna_extraction',
-      model: GEMINI_MODEL,
+      model: CONSTANTS.DNA_GEMINI_MODEL,
       images_analyzed: imageParts.length,
       estimated_cost_usd: imageParts.length * 0.002, // Rough estimate
       duration_ms: durationMs,

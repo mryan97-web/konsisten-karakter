@@ -14,7 +14,7 @@ type UserData = {
   display_name: string;
   tier: string;
   status: string;
-  subscription: any;
+  subscription: Record<string, unknown> | null;
 };
 
 type Character = {

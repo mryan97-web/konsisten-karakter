@@ -31,6 +31,13 @@ export const E = {
   FORBIDDEN: (msg = 'Akses ditolak') => err('FORBIDDEN', msg, 403),
   TIER_LIMIT: (msg: string, requiredTier: string) =>
     err('TIER_LIMIT', msg, 403, { required_tier: requiredTier }),
+  RATE_LIMIT: (retryAfter: number, limit: number) => {
+    const r = new Response(JSON.stringify({
+      success: false,
+      error: { code: 'RATE_LIMIT', message: `Terlalu banyak request. Coba lagi dalam ${retryAfter} detik`, details: { retry_after: retryAfter, limit } },
+    }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter) } });
+    return r;
+  },
   INTERNAL: (msg = 'Terjadi kesalahan server') => err('INTERNAL_ERROR', msg, 500),
   DEMO_ALREADY_EXISTS: (sessionId: string) =>
     err('DEMO_ALREADY_EXISTS', 'Demo session masih aktif', 409, { session_id: sessionId }),

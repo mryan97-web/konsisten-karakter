@@ -10,7 +10,7 @@ type DemoChar = {
   description: string | null;
   is_locked: boolean;
   images: { image_id: string; blob_url: string; file_type: string; sort_order: number }[];
-  dna: any;
+  dna: Record<string, unknown> | null;
   prompt_count: number;
   prompts_remaining: number;
 };
