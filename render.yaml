@@ -1,0 +1,32 @@
+# ─── Render Blueprint — Auto-deploy ───
+# 1. Push this file + Dockerfile to GitHub
+# 2. Go to https://dashboard.render.com/blueprints
+# 3. Connect repo → auto-deploy
+services:
+  - type: web
+    name: consistent-char-backend
+    runtime: docker
+    repo: https://github.com/mryan97-web/konsisten-karakter.git
+    branch: main
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: JWT_SECRET
+        sync: false

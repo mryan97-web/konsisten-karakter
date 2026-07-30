@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import DashboardClient from './DashboardClient';
 
 async function fetchApi(path: string, token: string) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
   const res = await fetch(`${baseUrl}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',

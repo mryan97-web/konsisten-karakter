@@ -23,6 +23,9 @@ app.use('*', withRequestId);
 app.use('/api/*', withRateLimit(100, 60_000)); // 100 req/min per IP
 
 // ─── Health ───
+app.get('/health', (c) => {
+  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });

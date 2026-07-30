@@ -89,7 +89,7 @@ export default function UploadPhotoModal({ charId, charName, onClose, onComplete
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/'); return; }
 
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000';
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       let totalUploaded = 0;
       let retries = 0;
 

@@ -50,7 +50,7 @@ export default function DashboardClient({
     if (!session) { router.push('/'); return; }
 
     const headers = { Authorization: `Bearer ${session.access_token}` };
-    const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000';
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     
     try {
       const [userRes, charRes] = await Promise.all([

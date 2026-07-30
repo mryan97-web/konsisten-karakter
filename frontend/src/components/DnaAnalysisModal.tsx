@@ -47,7 +47,7 @@ export default function DnaAnalysisModal({ charId, charName, imageCount, onClose
       }
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character/${charId}/analyze-dna`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/character/${charId}/analyze-dna`,
         {
           method: 'POST',
           headers: {

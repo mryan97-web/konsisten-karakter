@@ -86,7 +86,7 @@ export default function CharacterDetailClient({
     if (!session) { router.push('/'); return; }
 
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character/${charId}`,
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/character/${charId}`,
       { headers: { Authorization: `Bearer ${session.access_token}` } }
     );
     const data = await res.json();
@@ -104,7 +104,7 @@ export default function CharacterDetailClient({
     if (!session) return;
 
     await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:4000'}/api/character/${charId}`,
+      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/character/${charId}`,
       { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } }
     );
     router.push('/dashboard');
